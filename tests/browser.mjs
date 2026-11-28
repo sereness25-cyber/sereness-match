@@ -1,0 +1,178 @@
+import { chromium } from 'playwright-core'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { createServer } from 'node:http'
+import assert from 'node:assert/strict'
+const mime={html:'text/html; charset=utf-8',js:'application/javascript',css:'text/css',webmanifest:'application/manifest+json',svg:'image/svg+xml',png:'image/png'}
+const server=createServer(async (req,res)=>{
+  const pathname=new URL(req.url,'http://127.0.0.1').pathname
+  const match=pathname.match(/^\/(sereness-match|private-preview|online-preview)\/([\w./-]*)$/)
+  try {
+    if(!match||match[2].includes('..')) throw Error('not found')
+    const file=match[2]||'index.html'
+    const kind=match[1]==='sereness-match'?'dist-pages':match[1]==='private-preview'?'dist-admin':'dist-online'
+    const data=await readFile(new URL('../'+kind+'/'+file,import.meta.url))
+    res.setHeader('content-type',mime[file.split('.').at(-1)]||'application/octet-stream')
+    res.end(data)
+  } catch { res.writeHead(404).end() }
+})
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
+const base='http://127.0.0.1:'+server.address().port
+// A short path avoids Windows Chromium Cache Storage path limits.
+const parent = resolve('..')
+const profile = await mkdtemp(join(parent,'.p1-'))
+let ctx
+try {
+  ctx = await chromium.launchPersistentContext(profile,{
+    channel:'chrome',headless:true,viewport:{width:390,height:844},isMobile:true,hasTouch:true,
+    args:['--disable-gpu','--disable-crashpad','--disable-crash-reporter'],
+  })
+  const page=await ctx.newPage()
+  page.setDefaultTimeout(10000)
+  const errors=[]
+  page.on('pageerror',e=>errors.push(e.message))
+  page.on('dialog',d=>d.accept('架空の通報理由'))
+  const heading=async title=>page.getByRole('heading',{name:title,exact:true}).waitFor()
+  const nav=async label=>page.getByRole('navigation',{name:'メインメニュー'}).getByRole('link',{name:label}).click()
+  await page.goto(base+'/sereness-match/')
+  await heading('Sereness Match')
+  await page.getByRole('link',{name:'新規会員登録',exact:true}).click()
+  await page.locator('[name=password]').fill('sereness-demo')
+  await page.locator('[name=confirm]').fill('sereness-demo')
+  await page.getByLabel('試用版の利用規約に同意').check()
+  await page.getByLabel('試用版のプライバシーポリシーに同意').check()
+  await page.getByRole('button',{name:'仮登録する'}).click()
+  await heading('今日、新しい出会いを。')
+  await nav('さがす')
+  await heading('お相手をさがす')
+  await page.locator('select[name=region]').selectOption('秋田市')
+  await page.getByRole('button',{name:'条件を保存'}).click()
+  await page.getByText('検索条件を保存しました。').waitFor()
+  assert.equal(await page.locator('.card').count(),3)
+  await page.reload()
+  assert.equal(await page.locator('.card').count(),3)
+  await page.getByRole('button',{name:'条件を解除'}).click()
+  assert.equal(await page.locator('.card').count(),6)
+  await page.locator('select[name=sort]').selectOption('age')
+  await page.getByRole('button',{name:'検索する'}).click()
+  assert.match(await page.locator('.card h3').first().innerText(),/なおき/)
+  await page.locator('a[href="#member/akari/search"]').click()
+  await heading('あかり 34歳')
+  await page.getByRole('button',{name:'お気に入り'}).click()
+  await nav('いいね')
+  for(const name of ['もらったいいね','送ったいいね','マッチング済み','足あと','閲覧履歴']) {
+    const tab=page.getByRole('button',{name,exact:true})
+    await tab.click()
+    assert.equal(await tab.getAttribute('class'),'')
+  }
+  await page.getByRole('button',{name:'お気に入り',exact:true}).click()
+  assert.equal(await page.locator('.card').count(),1)
+  await page.locator('a[href="#member/akari/likes"]').click()
+  await page.getByRole('button',{name:'♡ いいね',exact:true}).click()
+  await heading('マッチング成立')
+  await page.getByRole('link',{name:'相手のプロフィールを見る'}).click()
+  await heading('あかり 34歳')
+  await page.getByRole('link',{name:'‹ 戻る'}).click()
+  await heading('マッチング成立')
+  await page.getByRole('link',{name:'メッセージを送る'}).click()
+  await page.getByRole('link',{name:'相手のプロフィールを見る'}).click()
+  await heading('あかり 34歳')
+  await page.getByRole('link',{name:'‹ 戻る'}).click()
+  await page.getByRole('button',{name:'定型文を入力'}).click()
+  await page.getByRole('button',{name:'送信',exact:true}).click()
+  await page.getByText('はじめまして。よかったらお話ししませんか？').waitFor()
+  await page.getByRole('button',{name:'既読をシミュレート'}).click()
+  await page.getByText('既読',{exact:false}).first().waitFor()
+  await page.getByRole('button',{name:'通報',exact:true}).click()
+  await page.getByText('通報を試用データに記録しました。').waitFor()
+  await page.getByRole('button',{name:'ブロック',exact:true}).click()
+  await heading('ブロック一覧')
+  await page.getByRole('button',{name:'解除',exact:true}).click()
+  await page.getByText('ブロック中の会員はいません。').waitFor()
+  await nav('メッセージ')
+  await page.getByText('マッチングするとメッセージを送れます。').waitFor()
+  await nav('セレネス')
+  await page.locator('a[href="#service/koi"]').click()
+  await page.getByRole('button',{name:'試用予約する'}).click()
+  await nav('マイページ')
+  await page.getByRole('link',{name:'予約履歴',exact:true}).click()
+  await page.getByText('恋活イベント',{exact:true}).waitFor()
+  await page.getByRole('button',{name:'取り消す',exact:true}).click()
+  assert.equal(await page.getByText('恋活イベント',{exact:true}).count(),0)
+  await nav('マイページ')
+  await page.getByRole('link',{name:'プロフィール編集・写真'}).click()
+  await page.getByLabel('ニックネーム').fill('架空太郎')
+  await page.getByRole('button',{name:'保存する'}).click()
+  await page.getByRole('button',{name:'🌷',exact:true}).click()
+  await page.getByRole('button',{name:'写真を削除'}).click()
+  await page.getByText('写真未設定').waitFor()
+  await nav('マイページ')
+  await heading('架空太郎')
+  await page.getByRole('link',{name:'通知・プライバシー設定'}).click()
+  await page.getByLabel('新着メッセージ').uncheck()
+  await page.getByRole('button',{name:'設定を保存'}).click()
+  assert.equal(await page.getByLabel('新着メッセージ').isChecked(),false)
+  await nav('マイページ')
+  await page.getByRole('link',{name:'本人・年齢確認'}).click()
+  await page.getByRole('button',{name:'試用申請する'}).first().click()
+  await page.getByText('審査待ち（試用）').waitFor()
+  await nav('マイページ')
+  await page.getByRole('link',{name:'会員プラン',exact:true}).click()
+  await heading('婚活サポート会員')
+  await nav('マイページ')
+  await page.getByRole('button',{name:'ログアウト',exact:true}).click()
+  await heading('Sereness Match')
+  await page.getByRole('link',{name:'ログイン',exact:true}).click()
+  await page.locator('[name=password]').fill('sereness-demo')
+  await page.getByRole('button',{name:'テストログイン'}).click()
+  await heading('今日、新しい出会いを。')
+  const manifest=await page.request.get(base+'/sereness-match/manifest.webmanifest')
+  assert.equal(manifest.ok(),true)
+  assert.equal((await manifest.json()).name,'Sereness Match')
+  assert.equal((await page.request.get(base+'/sereness-match/admin/')).status(),404)
+  await page.evaluate(()=>Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(async()=>{
+    const registration=await navigator.serviceWorker.getRegistration()
+    reject(Error('Service worker ready timeout: '+JSON.stringify({
+      scope:registration?.scope, worker:registration?.installing?.state??registration?.waiting?.state??registration?.active?.state,
+    })))
+  },10000))]))
+  await page.reload()
+  await page.waitForFunction(()=>Boolean(navigator.serviceWorker.controller))
+  await ctx.setOffline(true)
+  await page.reload()
+  await heading('今日、新しい出会いを。')
+  await ctx.setOffline(false)
+  await nav('マイページ')
+  await page.getByRole('button',{name:'退会・テストデータ削除'}).click()
+  await heading('Sereness Match')
+  const admin=await page.goto(base+'/private-preview/')
+  assert.equal(admin?.ok(),true)
+  await heading('ダッシュボード')
+  const links=page.getByRole('navigation',{name:'管理メニュー'}).getByRole('link')
+  assert.equal(await links.count(),14)
+  for(let i=0;i<14;i++){
+    const item=links.nth(i)
+    const label=await item.innerText()
+    await item.click()
+    await heading(label)
+  }
+  const onlineRequests=[]
+  page.on('request',request=>{
+    if(new URL(request.url()).origin!==base) onlineRequests.push(request.url())
+  })
+  await page.goto(base+'/online-preview/')
+  await page.getByText('オンライン環境の準備中です。接続はPhase 2で行います。').waitFor()
+  assert.equal(await page.getByRole('link',{name:'新規会員登録'}).count(),0)
+  const onlineAssets=new URL('../dist-online/assets/',import.meta.url)
+  for(const asset of await readdir(onlineAssets)) {
+    if(asset.endsWith('.js')) assert.doesNotMatch(await readFile(new URL(asset,onlineAssets),'utf8'),/sereness-v04|あかり/)
+  }
+  assert.deepEqual(onlineRequests,[])
+  assert.deepEqual(errors,[])
+  console.log('Browser smoke checks passed: 6 demo menus, profiles, authentication, matching, chat, admin, Pages offline, and the isolated online build.')
+} finally {
+  await ctx?.close()
+  server.close()
+  if (dirname(profile)===parent) await rm(profile,{recursive:true,force:true})
+}
+

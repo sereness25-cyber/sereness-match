@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-admin/
+dist-pages/
+dist-online/
+.env*
+!.env.example
+android/
+ios/
+
