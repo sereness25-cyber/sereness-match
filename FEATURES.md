@@ -1,2268 +1,1708 @@
-# Sereness Match データベース設計書
+# Sereness Match 全機能詳細仕様書
 
-バージョン：1.0  
+バージョン：1.0
 作成日：2026年11月28日
-
-参照仕様書：
-- SPEC.md
-- FEATURES.md
+参照仕様書：SPEC.md
 
 ---
 
-# 1. データベース基本構成
+# 1. 基本開発方針
 
-## 1.1 採用技術
+本仕様書はSereness Matchの各機能の詳細動作を定義する。
 
-| 項目 | 技術 |
+SPEC.mdを上位仕様書とする。
+
+未確定事項については設定値として管理し、正式決定まで固定しない。
+
+## 1.1 共通処理
+
+すべての機能において以下を考慮する。
+
+- ローディング表示
+- 通信エラー処理
+- データ取得失敗時の再試行
+- データが存在しない場合の表示
+- 二重タップ防止
+- 二重登録防止
+- セッション有効期限
+- アカウント利用状態確認
+- 会員権限確認
+- 年齢確認状態確認
+- ブロック状態確認
+- スマートフォン表示
+- PCブラウザ表示
+
+## 1.2 会員区分
+
+| ID案 | 会員区分 |
 |---|---|
-| バックエンド | Supabase |
-| データベース | PostgreSQL |
-| ユーザー認証 | Supabase Auth |
-| ファイル保存 | Supabase Storage |
-| リアルタイム通信 | Supabase Realtime |
-| アクセス制御 | Row Level Security（RLS） |
-| サーバー処理 | PostgreSQL Functions・Edge Functions |
+| FREE | フリー会員 |
+| PREMIUM | プレミアム会員 |
+| SUPPORT | 婚活サポート会員 |
 
-## 1.2 基本設計方針
+女性会員にはプレミアム相当の利用権限を付与する。
 
-- 会員ごとに一意のUUIDを使用する。
-- 認証情報と公開プロフィールを分離する。
-- 個人情報と公開情報を分離する。
-- データベース側でアクセス権限を制御する。
-- ポイントやいいねの消費はサーバー側で処理する。
-- 決済情報をクライアント側から直接変更させない。
-- 管理者権限を一般会員と分離する。
-- デモデータと本番データを分離する。
-- 将来的な機能追加に対応できる構造とする。
+契約プランと実際の利用権限は分離して管理する。
+
+## 1.3 アカウント状態
+
+- 登録処理中
+- メール認証待ち
+- 利用可能
+- 一時利用停止
+- 永久利用停止
+- 退会処理中
+- 退会済み
 
 ---
 
-# 2. 共通データ型
+# 2. 起動画面
 
-| データ型 | 用途 |
+## 2.1 スプラッシュ画面
+
+表示内容：
+
+- Sereness Matchロゴ
+- ブランドカラー背景
+- ローディング表示
+
+## 2.2 起動時処理
+
+1. アプリ設定を取得する。
+2. メンテナンス状態を確認する。
+3. ログインセッションを確認する。
+4. アカウント状態を確認する。
+5. 必要な初期データを取得する。
+6. 適切な画面へ遷移する。
+
+## 2.3 遷移先
+
+| 状態 | 遷移先 |
 |---|---|
-| uuid | 各種ID |
-| text | 文字列 |
-| integer | 件数・ポイント |
-| bigint | 大規模集計 |
-| boolean | 有効・無効 |
-| date | 生年月日・日付 |
-| timestamptz | 日時 |
-| numeric | 数値・評価値 |
-| jsonb | 可変設定・補助情報 |
-| text[] | 複数選択情報 |
-
-金額は原則として日本円の整数で管理する。
-
-日時はUTCで保存し、日本時間で表示する。
-
-いいね回復、ログインボーナスなどの日付判定は日本時間を使用する。
+| 未ログイン | ログイン画面 |
+| メール未認証 | メール認証画面 |
+| 初回登録未完了 | 初回登録画面 |
+| 登録完了 | ホーム画面 |
+| 利用停止中 | 利用停止案内 |
+| メンテナンス中 | メンテナンス画面 |
 
 ---
 
-# 3. 共通カラム
+# 3. アカウント登録
 
-必要に応じて以下のカラムを設ける。
+## 3.1 ログイン前画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 主キー |
-| created_at | timestamptz | 作成日時 |
-| updated_at | timestamptz | 更新日時 |
-| deleted_at | timestamptz | 論理削除日時 |
+表示項目：
 
-IDは原則としてサーバー側で生成する。
+- ロゴ
+- サービス紹介
+- 新規登録ボタン
+- ログインボタン
+- 利用規約
+- プライバシーポリシー
 
-論理削除は必要なテーブルのみに採用し、個人情報を無期限に保持する仕組みにはしない。
+## 3.2 新規登録
 
----
+入力項目：
 
-# 4. テーブル一覧
+- メールアドレス
+- パスワード
+- パスワード確認
+- 利用規約への同意
+- プライバシーポリシーへの同意
+- 年齢・独身条件への同意
 
-## 4.1 アカウント関連
+## 3.3 登録処理
 
-- auth.users
-- accounts
-- account_private
-- profiles
-- profile_photos
-- profile_preferences
-- profile_hobbies
-- hobbies
-- verification_requests
-- verification_documents
-- user_settings
-- user_devices
+1. 入力内容を検証する。
+2. メールアドレスの登録処理を行う。
+3. 認証メールを送信する。
+4. メール認証完了を確認する。
+5. 初回プロフィール登録へ遷移する。
 
-## 4.2 マッチング関連
+## 3.4 エラー処理
 
-- likes
-- daily_like_balances
-- extra_like_balances
-- skips
-- matches
-- favorites
-- footprints
-- blocks
+- メールアドレス形式不正
+- パスワード条件未達
+- パスワード不一致
+- 規約未同意
+- 認証メール期限切れ
+- 通信エラー
 
-## 4.3 メッセージ関連
-
-- conversations
-- conversation_members
-- messages
-- message_reactions
-- message_reads
-- stickers
-- date_invitations
-- date_candidates
-- date_change_requests
-
-## 4.4 課金・ポイント関連
-
-- plans
-- plan_features
-- subscriptions
-- entitlements
-- payment_products
-- payments
-- payment_events
-- refunds
-- point_wallets
-- point_transactions
-- point_products
-- point_grants
-- feature_unlocks
-- login_stamps
-- login_bonus_rewards
-- login_bonus_claims
-
-## 4.5 セレネス関連
-
-- stores
-- store_hours
-- store_photos
-- store_menu_items
-- store_reservations
-- store_reservation_slots
-- date_plans
-- events
-- event_reservations
-- event_participants
-- event_match_requests
-- consultation_slots
-- consultations
-- consultation_records
-- introductions
-- introduction_responses
-
-## 4.6 診断・コンテンツ関連
-
-- diagnosis_versions
-- diagnosis_types
-- diagnosis_questions
-- diagnosis_choices
-- diagnosis_results
-- diagnosis_answers
-- articles
-- article_categories
-- message_templates
-- profile_templates
-- announcements
-- campaigns
-
-## 4.7 運営・管理関連
-
-- notifications
-- notification_settings
-- reports
-- report_evidence
-- penalties
-- appeals
-- prohibited_words
-- moderation_flags
-- inquiries
-- inquiry_messages
-- admins
-- admin_roles
-- admin_permissions
-- admin_role_permissions
-- admin_audit_logs
-- system_settings
-- feature_flags
-- daily_statistics
-- deletion_requests
-- background_jobs
+第三者による登録済みメールアドレスの特定を防ぐため、エラー表示には配慮する。
 
 ---
 
-# 5. アカウント管理
+# 4. 初回プロフィール登録
 
-## 5.1 auth.users
+## 4.1 必須項目
 
-Supabase Authが管理する標準認証テーブル。
+- ニックネーム
+- 生年月日
+- 性別
+- 希望するお相手の性別
+- 居住地
+- 利用目的
+- 婚姻歴
 
-用途：
+## 4.2 利用目的
 
-- メールアドレス認証
-- パスワード認証
-- セッション管理
-- パスワード再設定
+選択肢案：
 
-独自テーブルにパスワードを保存してはならない。
+- 恋活
+- 婚活
+- 再婚活
+- まずは友達から
 
----
+## 4.3 婚姻歴
 
-## 5.2 accounts
+- 未婚
+- 離婚
+- 死別
 
-会員の基本管理情報。
+## 4.4 登録完了処理
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | auth.users.idと連携 |
-| status | text | アカウント状態 |
-| registration_completed | boolean | 初回登録完了 |
-| email_verified_at | timestamptz | メール認証日時 |
-| age_verified_at | timestamptz | 年齢確認日時 |
-| identity_verified_at | timestamptz | 本人確認日時 |
-| last_login_at | timestamptz | 最終ログイン |
-| last_active_at | timestamptz | 最終利用日時 |
-| terms_version | text | 同意した規約 |
-| terms_accepted_at | timestamptz | 規約同意日時 |
-| privacy_version | text | 同意したポリシー |
-| privacy_accepted_at | timestamptz | 同意日時 |
-| created_at | timestamptz | 登録日時 |
-| updated_at | timestamptz | 更新日時 |
-| withdrawn_at | timestamptz | 退会日時 |
+1. 必須項目を確認する。
+2. 年齢条件を確認する。
+3. プロフィールを保存する。
+4. 初期会員権限を設定する。
+5. 初期いいね数を設定する。
+6. 登録ボーナスを付与する。
+7. ホーム画面へ遷移する。
 
-### status
-
-- pending
-- active
-- suspended
-- banned
-- withdrawing
-- withdrawn
-
-認証状態、利用停止状態は一般会員が直接変更できないようにする。
+登録ボーナスの数値は管理者設定を参照する。
 
 ---
 
-## 5.3 account_private
+# 5. ログイン・認証
 
-非公開の会員情報。
+## 5.1 ログイン
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| birth_date | date | 生年月日 |
-| legal_name | text | 本名・必要な場合のみ |
-| phone_number | text | 電話番号・必要な場合のみ |
-| verification_reference | text | 認証管理用参照情報 |
-| created_at | timestamptz | 作成日時 |
-| updated_at | timestamptz | 更新日時 |
+- メールアドレス
+- パスワード
+- ログインボタン
+- パスワードを忘れた場合
+- 新規登録へのリンク
 
-本名・電話番号は初期登録必須項目にしない。
+## 5.2 パスワード再設定
 
-必要性が確認された場合のみ取得する。
+1. メールアドレスを入力する。
+2. 再設定メールを送信する。
+3. 有効な再設定リンクを確認する。
+4. 新しいパスワードを登録する。
+5. ログイン画面へ戻る。
 
-一般会員への公開は禁止する。
+## 5.3 ログアウト
 
----
-
-# 6. プロフィール
-
-## 6.1 profiles
-
-会員プロフィール情報。
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| nickname | text | ニックネーム |
-| gender | text | 性別 |
-| prefecture | text | 居住都道府県 |
-| city | text | 居住市町村 |
-| hometown | text | 出身地 |
-| height | integer | 身長 |
-| body_type | text | 体型 |
-| occupation | text | 職業 |
-| education | text | 学歴 |
-| income_range | text | 年収区分 |
-| days_off | text[] | 休日 |
-| drinking | text | 飲酒 |
-| smoking | text | 喫煙 |
-| living_with | text | 同居人 |
-| has_car | boolean | 車の有無 |
-| relationship_purpose | text | 利用目的 |
-| marital_history | text | 婚姻歴 |
-| has_children | text | 子どもの有無 |
-| marriage_intention | text | 結婚への意識 |
-| wants_children | text | 子どもの希望 |
-| household_values | text | 家事・育児への考え |
-| meeting_preference | text | 会うまでの希望期間 |
-| date_payment_style | text | デート費用への考え |
-| personality | text[] | 性格 |
-| lifestyle | text | 過ごし方 |
-| ideal_date | text | 理想のデート |
-| bio | text | 自己紹介 |
-| short_message | text | ひとこと |
-| visibility | text | 公開状態 |
-| field_visibility | jsonb | 項目別公開設定 |
-| completion_rate | integer | 完成度 |
-| diagnosis_public | boolean | 診断結果公開 |
-| created_at | timestamptz | 作成日時 |
-| updated_at | timestamptz | 更新日時 |
-
-年齢は生年月日からサーバー側で算出する。
-
-生年月日そのものは公開しない。
-
-プロフィール完成度はサーバー側で計算する。
-
-非公開項目は検索結果やAPIレスポンスからも除外する。
+- セッションを終了する。
+- 端末内の認証情報を適切に削除する。
+- ログイン前画面へ戻る。
 
 ---
 
-## 6.2 profile_photos
+# 6. 共通ナビゲーション
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 写真ID |
-| user_id | uuid | 会員ID |
-| storage_path | text | 保存先 |
-| photo_type | text | main・sub |
-| sort_order | integer | 表示順 |
-| moderation_status | text | 審査状態 |
-| created_at | timestamptz | 登録日時 |
-| updated_at | timestamptz | 更新日時 |
+下部ナビゲーションを採用する。
 
-初期制限案：
+| メニュー | 遷移先 |
+|---|---|
+| ホーム | ホーム画面 |
+| さがす | 会員検索 |
+| いいね | いいね管理 |
+| メッセージ | メッセージ一覧 |
+| セレネス | 独自サービス |
+| マイページ | 会員情報管理 |
 
-- メイン写真：1枚
-- サブ写真：最大5枚
+## 6.1 バッジ表示
 
-審査状態：
+以下の未確認件数を表示する。
 
-- pending
-- approved
-- rejected
+- 受信したいいね
+- 未読メッセージ
 
-公開条件を満たさない画像は他会員へ配信しない。
+件数が多い場合は「99+」などの省略表示を使用する。
 
 ---
 
-## 6.3 profile_preferences
+# 7. ホーム画面
 
-希望するお相手の条件。
+## 7.1 表示構成
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| preferred_genders | text[] | 希望する性別 |
-| min_age | integer | 希望最低年齢 |
-| max_age | integer | 希望最高年齢 |
-| preferred_prefectures | text[] | 希望都道府県 |
-| preferred_cities | text[] | 希望市町村 |
-| preferred_purposes | text[] | 希望利用目的 |
-| updated_at | timestamptz | 更新日時 |
+上部：
 
-希望条件は原則として本人のみ閲覧可能とする。
+- Sereness Matchロゴ
+- 通知アイコン
 
----
+メイン：
 
-## 6.4 hobbies
+1. 今日のおすすめ
+2. 新規登録会員
+3. 近くに住んでいる会員
+4. 共通の趣味がある会員
+5. 最近ログインした会員
 
-趣味マスターデータ。
+## 7.2 会員カード
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 趣味ID |
-| name | text | 趣味名 |
-| category | text | カテゴリー |
-| sort_order | integer | 表示順 |
-| is_active | boolean | 利用可否 |
+表示項目：
 
-カテゴリー例：
+- メイン写真
+- ニックネーム
+- 年齢
+- 居住地
+- 利用目的
+- 本人確認済みバッジ
+- 新規会員バッジ
+- 最終ログイン状況
+- 共通の趣味
 
-- カフェ
-- グルメ
-- 旅行
-- ゲーム
-- アニメ
-- 映画
-- 音楽
-- スポーツ
-- アウトドア
-- 読書
-- ペット
+## 7.3 カード操作
 
-## 6.5 profile_hobbies
+会員カードをタップするとプロフィール詳細画面へ遷移する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID |
-| hobby_id | uuid | 趣味ID |
-| created_at | timestamptz | 登録日時 |
+## 7.4 非表示対象
 
-user_idとhobby_idの組み合わせを一意とする。
+- 自分自身
+- ブロックした会員
+- ブロックされた会員
+- 退会済み会員
+- 利用停止会員
+- 非公開設定により閲覧できない会員
 
 ---
 
-# 7. 年齢確認・本人確認
+# 8. プロフィール編集
 
-## 7.1 verification_requests
+## 8.1 編集カテゴリー
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 申請ID |
-| user_id | uuid | 会員ID |
-| verification_type | text | age・identity |
-| status | text | 審査状態 |
-| document_type | text | 証明書種類 |
-| submitted_at | timestamptz | 提出日時 |
-| reviewed_at | timestamptz | 審査日時 |
-| reviewed_by | uuid | 審査管理者 |
-| rejection_reason | text | 再提出・否認理由 |
-| created_at | timestamptz | 作成日時 |
+- 基本情報
+- 学歴・生活情報
+- 恋愛・結婚情報
+- 性格・趣味
+- 自己紹介
+- プロフィール写真
 
-審査状態：
+## 8.2 保存処理
 
-- pending
-- approved
-- rejected
-- resubmit_required
+1. 編集内容を入力する。
+2. 入力内容を検証する。
+3. 保存ボタンを押す。
+4. サーバーへ保存する。
+5. 保存完了を表示する。
 
-同じ種類の有効な審査中申請が重複しないようにする。
+## 8.3 写真管理
 
-## 7.2 verification_documents
+- メイン写真登録
+- サブ写真登録
+- 写真変更
+- 写真削除
+- 写真並び替え
+- メイン写真変更
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 証明書ID |
-| request_id | uuid | 申請ID |
-| storage_path | text | 非公開保存先 |
-| mime_type | text | ファイル形式 |
-| uploaded_at | timestamptz | 提出日時 |
-| expires_at | timestamptz | 保存期限 |
-| deleted_at | timestamptz | 削除日時 |
+初期設定案：
 
-証明書は必要最小限の期間のみ保持する。
+- メイン写真1枚
+- サブ写真最大5枚
 
-具体的な取得方法と保存期間は法令確認後に確定する。
+画像の形式、容量、解像度を検証する。
 
----
+位置情報などの不要な画像メタデータは削除する。
 
-# 8. 会員設定
+## 8.4 公開制限
 
-## 8.1 user_settings
+以下は一般会員に公開しない。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| private_mode | boolean | 非公開モード |
-| show_last_active | boolean | 最終利用表示 |
-| introduction_opt_in | boolean | 紹介希望 |
-| updated_at | timestamptz | 更新日時 |
-
-非公開モードの利用権限と具体的な公開範囲はサーバー側で管理する。
-
-## 8.2 user_devices
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 端末ID |
-| user_id | uuid | 会員ID |
-| platform | text | ios・android・web |
-| push_token | text | 通知トークン |
-| is_active | boolean | 有効状態 |
-| last_used_at | timestamptz | 最終利用日時 |
-
-通知トークンは一般会員へ公開しない。
+- 生年月日
+- メールアドレス
+- 正確な住所
+- 認証用証明書
+- 決済情報
+- 管理者専用情報
 
 ---
 
-# 9. いいねシステム
+# 9. プロフィール詳細画面
 
-## 9.1 likes
+## 9.1 表示内容
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | いいねID |
-| sender_id | uuid | 送信会員 |
-| receiver_id | uuid | 受信会員 |
-| like_type | text | normal・message |
-| message | text | 添付メッセージ |
-| cost | integer | 消費数 |
-| status | text | 状態 |
-| viewed_at | timestamptz | 確認日時 |
-| responded_at | timestamptz | 回答日時 |
-| created_at | timestamptz | 送信日時 |
+- メイン写真
+- サブ写真
+- ニックネーム
+- 年齢
+- 居住地
+- 自己紹介
+- 基本情報
+- 生活情報
+- 恋愛・結婚情報
+- 趣味
+- 性格
+- 恋愛タイプ診断結果
+- 認証バッジ
 
-状態：
+## 9.2 操作ボタン
 
-- pending
-- accepted
-- skipped
-- cancelled
+- いいね
+- メッセージ付きいいね
+- お気に入り
+- スキップ
+- 通報
+- ブロック
 
-同一方向の重複送信を防止する。
+マッチング済みの場合はメッセージボタンを表示する。
 
-自分自身への送信は禁止する。
+## 9.3 閲覧時処理
 
-## 9.2 daily_like_balances
+プロフィール閲覧時に足あとを記録する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID |
-| target_date | date | 対象日 |
-| granted_count | integer | 当日付与数 |
-| used_count | integer | 使用数 |
-| updated_at | timestamptz | 更新日時 |
-
-user_idとtarget_dateの組み合わせを一意とする。
-
-残数は付与数から使用数を引いて算出する。
-
-## 9.3 extra_like_balances
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 追加付与ID |
-| user_id | uuid | 会員ID |
-| granted_count | integer | 追加付与数 |
-| used_count | integer | 使用数 |
-| source | text | 付与理由 |
-| point_transaction_id | uuid | ポイント取引ID |
-| expires_at | timestamptz | 有効期限 |
-| created_at | timestamptz | 付与日時 |
-
-追加いいねの有効期限と消費優先順位は未確定とする。
-
-## 9.4 skips
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 操作会員 |
-| target_user_id | uuid | 対象会員 |
-| created_at | timestamptz | スキップ日時 |
-| expires_at | timestamptz | 再表示可能日時 |
-
-スキップの保持期間は設定値で管理する。
+自分自身の閲覧は記録しない。
 
 ---
 
-# 10. マッチング
+# 10. 年齢確認
 
-## 10.1 matches
+## 10.1 年齢確認画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | マッチングID |
-| user_a_id | uuid | 会員A |
-| user_b_id | uuid | 会員B |
-| match_type | text | normal・introduction・event |
-| source_id | uuid | 成立元データID |
-| status | text | 状態 |
-| matched_at | timestamptz | 成立日時 |
-| ended_at | timestamptz | 終了日時 |
-| ended_by | uuid | 解除した会員 |
+表示項目：
 
-状態：
+- 年齢確認の説明
+- 利用可能な証明書
+- 証明書提出方法
+- 個人情報の取り扱い
+- 申請ボタン
+- 審査状況
 
-- active
-- unmatched
-- blocked
-- closed
+## 10.2 申請処理
 
-会員IDの組み合わせを正規化し、同一ペアの有効なマッチングが重複しないようにする。
+1. 必要な確認情報を提出する。
+2. 非公開領域へ安全に送信する。
+3. 審査申請を登録する。
+4. 審査中へ変更する。
+5. 管理者が審査する。
+6. 承認または再提出を通知する。
 
----
+## 10.3 年齢確認前の制限
 
-# 11. お気に入り・足あと・ブロック
+- いいね送信不可
+- メッセージ付きいいね送信不可
+- ありがとう不可
+- マッチング不可
+- メッセージ送信不可
+- デートのお誘い不可
 
-## 11.1 favorites
+制限された機能を押した場合は年齢確認案内を表示する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 登録会員 |
-| target_user_id | uuid | 対象会員 |
-| created_at | timestamptz | 登録日時 |
-
-本人のみ閲覧可能とする。
-
-## 11.2 footprints
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| viewer_id | uuid | 閲覧会員 |
-| target_user_id | uuid | 閲覧された会員 |
-| last_viewed_at | timestamptz | 最新閲覧日時 |
-| view_count | integer | 閲覧回数 |
-
-viewer_idとtarget_user_idの組み合わせを一意とする。
-
-閲覧制限はサーバー側で適用する。
-
-## 11.3 blocks
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| blocker_id | uuid | ブロックした会員 |
-| blocked_id | uuid | ブロックされた会員 |
-| created_at | timestamptz | 登録日時 |
-
-ブロック関係は双方の検索、閲覧、交流機能に反映する。
-
-ブロックされた側にはブロック情報を直接公開しない。
+証明書の種類、確認方法、確認対象情報、保存期間は法令確認後に確定する。
 
 ---
 
-# 12. メッセージシステム
+# 11. 本人確認
 
-## 12.1 conversations
+本人確認は任意とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 会話ID |
-| match_id | uuid | マッチングID |
-| status | text | active・closed |
-| last_message_at | timestamptz | 最新送信日時 |
-| created_at | timestamptz | 作成日時 |
+## 11.1 機能
 
-## 12.2 conversation_members
+- 本人確認申請
+- 審査状況確認
+- 再提出
+- 本人確認済みバッジ表示
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| conversation_id | uuid | 会話ID |
-| user_id | uuid | 会員ID |
-| last_read_at | timestamptz | 最終既読日時 |
-| joined_at | timestamptz | 参加日時 |
+## 11.2 承認処理
 
-## 12.3 messages
+管理者が承認した場合のみ本人確認済み状態へ変更する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | メッセージID |
-| conversation_id | uuid | 会話ID |
-| sender_id | uuid | 送信会員 |
-| message_type | text | メッセージ種類 |
-| body | text | 本文 |
-| storage_path | text | 画像保存先 |
-| sticker_id | uuid | スタンプID |
-| date_invitation_id | uuid | デート申請ID |
-| client_request_id | uuid | 重複送信防止ID |
-| created_at | timestamptz | 送信日時 |
-| unsent_at | timestamptz | 取り消し日時 |
-
-message_type：
-
-- text
-- image
-- sticker
-- date_invitation
-- system
-
-送信取り消し済みの本文は通常の取得処理から除外する。
-
-通報対応に必要な証拠は別途アクセス制限された領域で管理する。
-
-## 12.4 message_reactions
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| message_id | uuid | メッセージID |
-| user_id | uuid | 会員ID |
-| reaction_type | text | リアクション |
-| created_at | timestamptz | 登録日時 |
-
-## 12.5 message_reads
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| message_id | uuid | メッセージID |
-| user_id | uuid | 閲覧会員 |
-| read_at | timestamptz | 既読日時 |
-
-既読情報の取得は会員プランに応じて制御する。
-
-## 12.6 stickers
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | スタンプID |
-| name | text | 名称 |
-| category | text | カテゴリー |
-| storage_path | text | 画像保存先 |
-| sort_order | integer | 表示順 |
-| is_active | boolean | 利用可否 |
+本人確認と年齢確認の審査状態は個別に管理する。
 
 ---
 
-# 13. デート支援
+# 12. 会員検索
 
-## 13.1 date_invitations
+## 12.1 検索方式
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | デート申請ID |
-| match_id | uuid | マッチングID |
-| sender_id | uuid | 申請会員 |
-| receiver_id | uuid | 相手会員 |
-| date_type | text | デート種類 |
-| location_name | text | 希望場所 |
-| message | text | メッセージ |
-| status | text | 申請状態 |
-| confirmed_candidate_id | uuid | 確定候補ID |
-| created_at | timestamptz | 申請日時 |
-| responded_at | timestamptz | 回答日時 |
+- 基本検索
+- 詳細検索
+- 地域検索
+- 特集検索
 
-## 13.2 date_candidates
+## 12.2 基本検索項目
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 候補ID |
-| invitation_id | uuid | 申請ID |
-| starts_at | timestamptz | 候補日時 |
-| ends_at | timestamptz | 終了予定日時 |
+- 年齢範囲
+- 居住地
+- 利用目的
+- 趣味
+- 婚姻歴
+- 本人確認状況
 
-## 13.3 date_change_requests
+## 12.3 詳細検索項目
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 変更申請ID |
-| invitation_id | uuid | デート申請ID |
-| requested_by | uuid | 変更希望会員 |
-| proposed_at | timestamptz | 希望日時 |
-| proposed_location | text | 希望場所 |
-| status | text | 変更状態 |
-| created_at | timestamptz | 申請日時 |
-| responded_at | timestamptz | 回答日時 |
+- 身長
+- 体型
+- 職業
+- 年収
+- 休日
+- 飲酒
+- 喫煙
+- 子どもの有無
+- 結婚への意識
+- 車の有無
+- 最終ログイン
 
-双方の承認が成立するまで確定済みデート予定を変更しない。
+## 12.4 検索操作
+
+- 条件指定
+- 検索実行
+- 条件リセット
+- 検索結果表示
+- 条件変更
+- プロフィール閲覧
+
+## 12.5 並び替え候補
+
+- おすすめ順
+- 最終ログイン順
+- 新規登録順
+- 地域優先順
+
+## 12.6 権限制御
+
+男性フリー会員が詳細検索を利用する場合は、プレミアム会員案内またはポイント利用案内を表示する。
+
+サーバー側でも検索権限を確認する。
 
 ---
 
-# 14. 会員プラン
+# 13. おすすめシステム
 
-## 14.1 plans
+AI APIを使用しない。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | プランID |
-| code | text | FREE・PREMIUM・SUPPORT |
-| name | text | プラン名 |
-| monthly_price | integer | 月額料金 |
-| description | text | 説明 |
-| is_active | boolean | 販売状態 |
+## 13.1 評価項目
 
-初期料金：
+- 希望年齢との一致
+- 希望地域との一致
+- 利用目的との一致
+- 共通の趣味
+- 休日の一致
+- 結婚観
+- 恋愛タイプ
+- 最近の利用状況
 
-| プラン | 月額 |
+## 13.2 処理方式
+
+各評価項目を数値化し、設定された重みを用いておすすめ順を計算する。
+
+重み付けは管理者設定で調整できる構造とする。
+
+## 13.3 表示ルール
+
+- 閲覧権限のない会員を除外する。
+- 希望するお相手の性別を考慮する。
+- 同じ会員への過度な表示集中を防止する。
+- 優先表示の効果を反映する。
+- 優先表示によって安全条件を無効化しない。
+
+具体的な計算式は別途確定する。
+
+---
+
+# 14. いいねシステム
+
+## 14.1 毎日の回復数
+
+| 会員区分 | 回復数 |
 |---|---:|
-| FREE | 0円 |
-| PREMIUM | 980円 |
-| SUPPORT | 3,300円 |
+| 男性フリー | 5 |
+| 男性プレミアム | 20 |
+| 女性 | 20 |
+| 婚活サポート | 20 |
 
-女性のプレミアム相当権限は別途利用権限として付与する。
+毎日回復型とし、未使用分は翌日に繰り越さない。
 
-## 14.2 plan_features
+## 14.2 通常のいいね
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| plan_id | uuid | プランID |
-| feature_code | text | 機能コード |
-| is_enabled | boolean | 利用可否 |
-| limit_value | integer | 利用上限 |
-| settings | jsonb | 補助設定 |
+消費数：1
 
-機能コード例：
+処理：
 
-- daily_likes
-- advanced_search
-- unlimited_footprints
-- read_receipts
-- priority_display
-- private_mode
-- event_discount
-- marriage_support
+1. 送信条件を確認する。
+2. 年齢確認状態を確認する。
+3. 残りいいね数を確認する。
+4. 重複送信を確認する。
+5. ブロック状態を確認する。
+6. いいねを登録する。
+7. いいね数を消費する。
+8. 相手へ通知する。
 
-## 14.3 subscriptions
+いいね登録と消費処理は同一トランザクションで実行する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 契約ID |
-| user_id | uuid | 会員ID |
-| plan_id | uuid | プランID |
-| provider | text | 決済事業者 |
-| provider_subscription_id | text | 外部契約ID |
-| status | text | 契約状態 |
-| starts_at | timestamptz | 開始日時 |
-| current_period_end | timestamptz | 現在の契約終了日時 |
-| auto_renew | boolean | 自動更新 |
-| cancelled_at | timestamptz | 解約日時 |
-| updated_at | timestamptz | 更新日時 |
+## 14.3 メッセージ付きいいね
 
-## 14.4 entitlements
+消費数：3
 
-実際に利用できる機能を管理する。
+- メッセージ入力画面を表示する。
+- 文字数を検証する。
+- 内容を確認する。
+- 送信する。
+- 相手へ通知する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 権限ID |
-| user_id | uuid | 会員ID |
-| feature_code | text | 機能コード |
-| source | text | 付与元 |
-| source_id | uuid | 関連ID |
-| starts_at | timestamptz | 開始日時 |
-| expires_at | timestamptz | 終了日時 |
-| revoked_at | timestamptz | 取消日時 |
+文字数上限は100文字を初期案とする。
 
-付与元：
+## 14.4 ありがとう
 
-- base_plan
-- subscription
-- gender_policy
-- points
-- campaign
-- admin
+消費数：0
 
-契約状態と利用権限を分離することで、女性無料特典や期間限定機能にも対応する。
+受信したいいねに対して実行できる。
 
----
+承認条件を確認し、マッチングを成立させる。
 
-# 15. 決済管理
+## 14.5 スキップ
 
-## 15.1 payment_products
+消費数：0
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 商品ID |
-| product_type | text | subscription・points・event |
-| provider | text | 決済事業者 |
-| external_product_id | text | 外部商品ID |
-| internal_reference_id | uuid | 内部商品ID |
-| price | integer | 基準価格 |
-| currency | text | 通貨 |
-| is_active | boolean | 販売状態 |
+表示中の会員を見送る。
 
-## 15.2 payments
+スキップ情報の保持期間と再表示条件は未確定とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 決済ID |
-| user_id | uuid | 会員ID |
-| product_id | uuid | 商品ID |
-| provider | text | 決済事業者 |
-| external_transaction_id | text | 外部取引ID |
-| amount | integer | 決済金額 |
-| currency | text | 通貨 |
-| status | text | 決済状態 |
-| paid_at | timestamptz | 決済日時 |
-| created_at | timestamptz | 作成日時 |
+## 14.6 残数不足
 
-外部取引IDの重複登録を防止する。
+残りいいね数が不足している場合：
 
-## 15.3 payment_events
+- 送信を実行しない。
+- 翌日の回復案内を表示する。
+- ポイントによる追加いいねを案内する。
+- 対象会員にはプレミアム会員案内を表示する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | イベントID |
-| provider | text | 決済事業者 |
-| external_event_id | text | 外部イベントID |
-| event_type | text | イベント種類 |
-| processing_status | text | 処理状態 |
-| received_at | timestamptz | 受信日時 |
-| processed_at | timestamptz | 処理日時 |
+## 14.7 いいね画面
 
-決済通知の署名を検証し、同じイベントを二重処理しない。
-
-## 15.4 refunds
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 返金ID |
-| payment_id | uuid | 決済ID |
-| external_refund_id | text | 外部返金ID |
-| amount | integer | 返金額 |
-| reason | text | 返金理由 |
-| status | text | 処理状態 |
-| created_at | timestamptz | 作成日時 |
-| refunded_at | timestamptz | 返金日時 |
-
-カード番号、セキュリティコードは保存しない。
+- 受け取ったいいね
+- 送ったいいね
+- メッセージ付きいいね
+- 残りいいね数
+- ありがとうボタン
 
 ---
 
-# 16. ポイントシステム
+# 15. マッチングシステム
 
-## 16.1 point_wallets
+## 15.1 通常マッチング
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| free_balance | integer | 無料残高 |
-| paid_balance | integer | 購入残高 |
-| updated_at | timestamptz | 更新日時 |
+いいねを受け取った会員が「ありがとう」を押すことで成立する。
 
-残高が負数にならないように制約を設ける。
+## 15.2 成立処理
 
-## 16.2 point_transactions
+1. 双方のアカウント状態を確認する。
+2. 双方の年齢確認状態を確認する。
+3. ブロック状態を確認する。
+4. 対象のいいねを確認する。
+5. 重複マッチングを確認する。
+6. マッチング情報を登録する。
+7. メッセージルームを作成する。
+8. 双方に通知する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 取引ID |
-| user_id | uuid | 会員ID |
-| transaction_type | text | 獲得・消費・調整 |
-| point_type | text | free・paid |
-| amount | integer | 増減ポイント |
-| balance_after | integer | 処理後残高 |
-| reason_code | text | 処理理由 |
-| reference_id | uuid | 関連データID |
-| idempotency_key | text | 重複処理防止キー |
-| created_at | timestamptz | 処理日時 |
+## 15.3 成立画面
 
-取引履歴の直接編集は禁止する。
+- 双方のプロフィール写真
+- マッチング成立メッセージ
+- メッセージを送るボタン
+- ホームへ戻るボタン
 
-修正が必要な場合は調整取引を追加する。
+## 15.4 マッチング解除
 
-## 16.3 point_products
+1. 対象会員を選択する。
+2. マッチング解除を押す。
+3. 確認画面を表示する。
+4. マッチング状態を解除する。
+5. 新規メッセージ送信を停止する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 商品ID |
-| points | integer | ポイント数 |
-| price | integer | 基準価格 |
-| sort_order | integer | 表示順 |
-| is_active | boolean | 販売状態 |
+解除後の再マッチング条件および過去のメッセージ表示条件は別途決定する。
 
-初期販売価格案：
+---
 
-| ポイント | 価格 |
-|---|---:|
-| 10pt | 120円 |
-| 30pt | 360円 |
-| 50pt | 550円 |
-| 100pt | 980円 |
-| 300pt | 2,800円 |
-| 500pt | 4,500円 |
+# 16. メッセージシステム
 
-## 16.4 point_grants
+## 16.1 メッセージ一覧
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 付与単位ID |
-| user_id | uuid | 会員ID |
-| point_type | text | free・paid |
-| original_amount | integer | 付与数 |
-| remaining_amount | integer | 未使用数 |
-| transaction_id | uuid | 付与取引ID |
-| granted_at | timestamptz | 付与日時 |
-| expires_at | timestamptz | 有効期限 |
+表示項目：
 
-ポイントの有効期限を設定する場合に備え、付与単位で残高を管理する。
+- 相手の写真
+- ニックネーム
+- 最新メッセージ
+- 最新送信日時
+- 未読件数
 
-## 16.5 feature_unlocks
+最新メッセージ日時を基準に並べる。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 解放ID |
-| user_id | uuid | 会員ID |
-| feature_code | text | 解放機能 |
-| target_id | uuid | 対象データID |
-| point_transaction_id | uuid | 消費取引ID |
-| starts_at | timestamptz | 開始日時 |
-| expires_at | timestamptz | 終了日時 |
-| status | text | 利用状態 |
+## 16.2 チャット画面
 
-対象機能：
+上部：
+
+- 相手の写真
+- ニックネーム
+- プロフィール表示
+- メニュー
+
+中央：
+
+- メッセージ履歴
+- 送信日時
+- リアクション
+- 既読表示
+
+下部：
+
+- テキスト入力
+- 写真送信
+- スタンプ
+- デートのお誘い
+- 送信ボタン
+
+## 16.3 テキスト送信
+
+1. メッセージを入力する。
+2. 利用条件を確認する。
+3. 文字数を確認する。
+4. 不適切な内容の検知を行う。
+5. メッセージを保存する。
+6. 相手へリアルタイム配信する。
+7. 通知を送信する。
+
+文字数上限は1,000文字を初期案とする。
+
+## 16.4 写真送信
+
+- 画像選択
+- プレビュー
+- 送信確認
+- ファイル検証
+- 安全なストレージへの保存
+- メッセージ登録
+
+関係する会員以外からの画像アクセスを禁止する。
+
+## 16.5 スタンプ
+
+- スタンプ一覧
+- スタンプ選択
+- スタンプ送信
+
+初期段階では無料スタンプのみを候補とする。
+
+## 16.6 リアクション
+
+メッセージに対してリアクションを登録・変更・解除できる。
+
+リアクションの種類は別途定義する。
+
+## 16.7 送信取り消し
+
+- 自分が送信したメッセージのみ対象とする。
+- 24時間以内を初期案とする。
+- 取り消し済み表示へ変更する。
+- 通報対応に必要な記録の扱いは別途定義する。
+
+## 16.8 既読確認
+
+対象：
+
+- 男性プレミアム会員
+- 女性
+- 婚活サポート会員
+- ポイントで既読確認を解放した会員
+
+既読情報の取得権限をサーバー側で制御する。
+
+## 16.9 送信失敗
+
+- 送信失敗表示
+- 再送信ボタン
+- 重複送信防止
+
+---
+
+# 17. デート支援システム
+
+## 17.1 デートのお誘い
+
+入力項目：
+
+- デート内容
+- 候補日
+- 希望時間
+- 希望場所
+- メッセージ
+
+## 17.2 お誘い状態
+
+- 回答待ち
+- 保留
+- 承認済み
+- 辞退
+- 変更申請中
+- キャンセル済み
+- 完了
+
+## 17.3 回答処理
+
+相手は以下から選択する。
+
+- 承認
+- 保留
+- お断り
+
+承認時に候補日時を確定する。
+
+## 17.4 日程変更
+
+1. 変更希望を送信する。
+2. 相手が変更内容を確認する。
+3. 相手が承認する。
+4. デート予定を更新する。
+
+## 17.5 店舗予約連携
+
+デート場所としてセレネスを選択した場合、店舗予約画面へ遷移できる。
+
+店舗予約の確定とデートの承認は別々に管理する。
+
+---
+
+# 18. 足あとシステム
+
+## 18.1 記録処理
+
+プロフィール詳細を閲覧した場合に記録する。
+
+同一会員からの足あとは最新閲覧日時に更新する。
+
+## 18.2 足あと一覧
+
+表示項目：
+
+- 写真
+- ニックネーム
+- 年齢
+- 居住地
+- 閲覧日時
+
+## 18.3 閲覧制限
+
+男性フリー会員：直近5人
+
+その他の会員：無制限
+
+ブロック状態にある会員は表示しない。
+
+---
+
+# 19. お気に入り
+
+## 19.1 機能
+
+- お気に入り登録
+- お気に入り解除
+- お気に入り一覧
+- プロフィール閲覧
+
+## 19.2 基本ルール
+
+- 全会員無料
+- 登録数無制限
+- 重複登録不可
+- 相手への通知なし
+- ブロック・退会会員の非表示
+
+---
+
+# 20. 会員プラン管理
+
+## 20.1 プラン画面
+
+表示項目：
+
+- 現在の会員プラン
+- 利用可能機能
+- 月額料金
+- 契約状態
+- 次回更新日
+- プラン比較
+- プラン変更
+- 解約案内
+
+## 20.2 料金
+
+- 男性フリー：無料
+- 男性プレミアム：月額980円
+- 女性プレミアム相当：無料
+- 婚活サポート：男女共通月額3,300円
+
+## 20.3 プラン変更
+
+決済事業者から有効な契約情報を取得した場合のみ権限を変更する。
+
+## 20.4 契約状態
+
+- 無料
+- 契約処理中
+- 契約有効
+- 更新失敗
+- 解約予約済み
+- 契約終了
+- 返金処理済み
+
+契約終了後は適切な無料会員権限へ戻す。
+
+---
+
+# 21. ポイントシステム
+
+## 21.1 ポイント種別
+
+- 無料獲得ポイント
+- 購入ポイント
+
+## 21.2 ポイント画面
+
+- 合計残高
+- 無料ポイント残高
+- 購入ポイント残高
+- ポイント購入
+- ポイント使用
+- 獲得履歴
+- 消費履歴
+
+## 21.3 無料ポイント獲得
+
+- 新規登録
+- プロフィール完成
+- 年齢確認
+- 本人確認
+- ログイン
+- キャンペーン
+
+付与数は管理者設定を参照する。
+
+## 21.4 ポイント使用
 
 - 追加いいね
-- 優先表示
+- プロフィール優先表示
 - 足あと閲覧制限解除
-- 詳細検索
+- 詳細検索解放
 - 既読確認
 
-実際の機能権限はentitlementsなどと連携して管理する。
+## 21.5 消費処理
+
+1. 使用内容を確認する。
+2. 消費ポイントを表示する。
+3. 利用者が承認する。
+4. ポイント残高を確認する。
+5. ポイントを消費する。
+6. 対象機能を解放する。
+7. 取引履歴を登録する。
+
+消費処理と機能解放は整合性を維持する。
+
+処理失敗時にポイントだけが消費されないようにする。
+
+## 21.6 管理者調整
+
+管理者による付与・減算は理由の入力を必須とする。
+
+変更前後の残高と操作履歴を記録する。
 
 ---
 
-# 17. ログインボーナス
+# 22. ログインボーナス
 
-## 17.1 login_stamps
+## 22.1 月間スタンプカード
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID |
-| login_date | date | ログイン日 |
-| reward_points | integer | 獲得ポイント |
-| created_at | timestamptz | 獲得日時 |
+表示項目：
 
-user_idとlogin_dateの組み合わせを一意とする。
+- 対象年月
+- カレンダー
+- ログイン済み日
+- 累計ログイン日数
+- 達成済み報酬
+- 次回報酬
 
-## 17.2 login_bonus_rewards
+## 22.2 獲得処理
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 報酬ID |
-| reward_type | text | daily・milestone・perfect |
-| required_days | integer | 必要日数 |
-| reward_points | integer | 報酬ポイント |
-| is_active | boolean | 有効状態 |
+1. ログイン日を確認する。
+2. 当日の獲得履歴を確認する。
+3. 未獲得の場合にスタンプを付与する。
+4. 基本ポイントを付与する。
+5. 累計日数を更新する。
+6. 達成報酬を判定する。
+7. 未獲得の達成報酬を付与する。
 
-## 17.3 login_bonus_claims
+## 22.3 月間リセット
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 獲得ID |
-| user_id | uuid | 会員ID |
-| reward_id | uuid | 報酬ID |
-| target_month | date | 対象月 |
-| point_transaction_id | uuid | ポイント取引ID |
-| claimed_at | timestamptz | 獲得日時 |
+毎月1日に新しいスタンプカードへ切り替える。
 
-月間達成報酬の重複獲得を禁止する。
+獲得済みポイントは維持する。
 
-毎月のスタンプは新しい月のデータとして管理し、過去の履歴を上書きしない。
+報酬の二重獲得を防止する。
 
 ---
 
-# 18. 店舗連携
+# 23. 通知システム
 
-## 18.1 stores
+## 23.1 基本通知
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 店舗ID |
-| name | text | 店舗名 |
-| description | text | 店舗紹介 |
-| address | text | 所在地 |
-| access_information | text | アクセス |
-| phone_number | text | 店舗電話番号 |
-| reservation_enabled | boolean | 予約可否 |
-| is_active | boolean | 公開状態 |
+- いいね受信
+- メッセージ付きいいね受信
+- マッチング成立
+- メッセージ受信
 
-初期登録店舗：
+## 23.2 通知一覧
 
-Café & Bar Sereness
+- 通知タイトル
+- 通知内容
+- 受信日時
+- 未読・既読状態
 
-## 18.2 store_hours
+## 23.3 通知操作
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 営業時間ID |
-| store_id | uuid | 店舗ID |
-| day_of_week | integer | 曜日 |
-| opening_time | time | 開店時刻 |
-| closing_time | time | 閉店時刻 |
-| closes_next_day | boolean | 翌日閉店 |
-| is_closed | boolean | 定休日 |
+- 通知詳細
+- 対象画面への遷移
+- 既読処理
+- 一括既読
 
-日付をまたぐ夜間営業に対応する。
+## 23.4 通知設定
 
-## 18.3 store_photos
+基本通知ごとにプッシュ通知の有効・無効を設定できる構造とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 写真ID |
-| store_id | uuid | 店舗ID |
-| storage_path | text | 画像保存先 |
-| caption | text | 説明 |
-| sort_order | integer | 表示順 |
+ロック画面に表示するメッセージ内容の公開範囲にも配慮する。
 
-## 18.4 store_menu_items
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | メニューID |
-| store_id | uuid | 店舗ID |
-| category | text | カテゴリー |
-| name | text | 商品名 |
-| description | text | 商品説明 |
-| price | integer | 料金 |
-| image_path | text | 商品画像 |
-| is_available | boolean | 提供状態 |
-
-## 18.5 store_reservation_slots
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 予約枠ID |
-| store_id | uuid | 店舗ID |
-| starts_at | timestamptz | 開始日時 |
-| ends_at | timestamptz | 終了日時 |
-| capacity | integer | 受付可能人数 |
-| is_available | boolean | 受付状態 |
-
-臨時休業や特別営業時間にも対応する。
-
-## 18.6 store_reservations
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 予約ID |
-| store_id | uuid | 店舗ID |
-| user_id | uuid | 予約会員 |
-| slot_id | uuid | 予約枠ID |
-| date_invitation_id | uuid | 関連デートID |
-| date_plan_id | uuid | 希望プランID |
-| reservation_at | timestamptz | 希望日時 |
-| guest_count | integer | 利用人数 |
-| purpose | text | 利用目的 |
-| notes | text | 備考 |
-| status | text | 予約状態 |
-| created_at | timestamptz | 申請日時 |
-| confirmed_at | timestamptz | 確定日時 |
-
-## 18.7 date_plans
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | プランID |
-| store_id | uuid | 店舗ID |
-| name | text | プラン名 |
-| description | text | 内容 |
-| price | integer | 料金 |
-| image_path | text | 画像 |
-| is_active | boolean | 提供状態 |
+重要な運営連絡は通常の交流通知と分離する。
 
 ---
 
-# 19. イベントシステム
+# 24. セレネスメニュー
 
-## 19.1 events
+表示カテゴリー：
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | イベントID |
-| title | text | イベント名 |
-| description | text | 内容 |
-| category | text | ジャンル |
-| image_path | text | イベント画像 |
-| prefecture | text | 開催都道府県 |
-| city | text | 開催市町村 |
-| venue | text | 開催場所 |
-| starts_at | timestamptz | 開始日時 |
-| ends_at | timestamptz | 終了日時 |
-| min_age | integer | 最低年齢 |
-| max_age | integer | 最高年齢 |
-| capacity | integer | 定員 |
-| price | integer | 基本参加費 |
-| premium_price | integer | 優待価格 |
-| application_deadline | timestamptz | 募集締切 |
-| matching_enabled | boolean | マッチング可否 |
-| cancellation_policy | text | キャンセル規定 |
-| status | text | 開催状態 |
+- Café & Bar Sereness
+- 店舗予約
+- デートプラン
+- イベント
+- 婚活サポート
+- 恋愛タイプ診断
+- 恋愛支援コンテンツ
 
-## 19.2 event_reservations
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 予約ID |
-| event_id | uuid | イベントID |
-| user_id | uuid | 会員ID |
-| payment_id | uuid | 決済ID |
-| charged_price | integer | 実際の参加費 |
-| status | text | 予約状態 |
-| hold_expires_at | timestamptz | 仮予約期限 |
-| created_at | timestamptz | 予約日時 |
-| cancelled_at | timestamptz | 取消日時 |
-
-決済中の仮予約を含めて定員超過を防止する。
-
-## 19.3 event_participants
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| event_id | uuid | イベントID |
-| user_id | uuid | 参加会員 |
-| attendance_status | text | 参加状態 |
-| matching_opt_in | boolean | マッチング同意 |
-| checked_in_at | timestamptz | 受付日時 |
-
-## 19.4 event_match_requests
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 申請ID |
-| event_id | uuid | イベントID |
-| sender_id | uuid | 申請会員 |
-| receiver_id | uuid | 相手会員 |
-| status | text | 申請状態 |
-| created_at | timestamptz | 申請日時 |
-| responded_at | timestamptz | 回答日時 |
-
-イベント参加資格と双方の同意を確認する。
+各カテゴリーを選択すると専用画面へ遷移する。
 
 ---
 
-# 20. 婚活サポート
+# 25. 店舗情報・予約
 
-## 20.1 consultation_slots
+## 25.1 店舗情報
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 相談枠ID |
-| starts_at | timestamptz | 開始日時 |
-| ends_at | timestamptz | 終了日時 |
-| consultation_method | text | 対面・オンライン |
-| is_available | boolean | 予約可否 |
+- 店舗名
+- 店舗写真
+- 店舗紹介
+- 営業時間
+- 定休日
+- 所在地
+- アクセス
+- メニュー
+- 利用料金
+- デートプラン
 
-## 20.2 consultations
+管理者が内容を更新できる構造とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 相談予約ID |
-| user_id | uuid | 会員ID |
-| slot_id | uuid | 相談枠ID |
-| category | text | 相談カテゴリー |
-| consultation_method | text | 相談方法 |
-| request_content | text | 相談内容 |
-| status | text | 予約状態 |
-| assigned_admin_id | uuid | 担当管理者 |
-| created_at | timestamptz | 申請日時 |
-| completed_at | timestamptz | 完了日時 |
+## 25.2 予約入力
 
-予約相談型を採用する。
+- 希望日
+- 希望時間
+- 利用人数
+- 利用目的
+- 希望プラン
+- 備考
 
-月間利用上限は設定値として管理する。
+## 25.3 予約状態
 
-## 20.3 consultation_records
+- 申請中
+- 予約確定
+- 変更申請中
+- キャンセル
+- 来店完了
+- 予約不可
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 相談記録ID |
-| consultation_id | uuid | 相談予約ID |
-| admin_id | uuid | 担当管理者 |
-| summary | text | 相談概要 |
-| advice | text | 対応内容 |
-| next_action | text | 今後の方針 |
-| created_at | timestamptz | 記録日時 |
-| updated_at | timestamptz | 更新日時 |
+## 25.4 予約処理
 
-相談記録は担当者および権限を持つ管理者のみ閲覧可能とする。
+1. 希望日時を選択する。
+2. 予約可能条件を確認する。
+3. 必要事項を入力する。
+4. 予約内容を確認する。
+5. 予約申請を登録する。
+6. 管理者が予約を確認する。
+7. 確定結果を利用者へ表示する。
 
-## 20.4 introductions
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 紹介ID |
-| user_a_id | uuid | 紹介会員A |
-| user_b_id | uuid | 紹介会員B |
-| admin_id | uuid | 紹介担当者 |
-| introduction_message | text | 紹介文 |
-| status | text | 紹介状態 |
-| expires_at | timestamptz | 回答期限 |
-| created_at | timestamptz | 紹介日時 |
-
-## 20.5 introduction_responses
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| introduction_id | uuid | 紹介ID |
-| user_id | uuid | 回答会員 |
-| response | text | accepted・declined |
-| responded_at | timestamptz | 回答日時 |
-
-双方の承認によってマッチングを成立させる。
+自動確定方式は別途決定する。
 
 ---
 
-# 21. 恋愛タイプ診断
+# 26. イベントシステム
 
-## 21.1 diagnosis_versions
+## 26.1 イベント一覧
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 診断バージョンID |
-| version | integer | バージョン番号 |
-| scoring_settings | jsonb | 判定ルール |
-| is_active | boolean | 現行版 |
-| published_at | timestamptz | 公開日時 |
+表示項目：
 
-## 21.2 diagnosis_types
+- イベント画像
+- イベント名
+- 開催日時
+- 開催場所
+- 参加料金
+- 募集状況
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | タイプID |
-| version_id | uuid | 診断バージョン |
-| code | text | タイプコード |
-| name | text | タイプ名 |
-| description | text | 説明 |
-| personality | text | 性格傾向 |
-| relationship_style | text | 恋愛傾向 |
-| strengths | text | 長所 |
-| cautions | text | 注意点 |
-| advice | text | アドバイス |
-| image_path | text | イラスト |
+## 26.2 イベント詳細
 
-## 21.3 diagnosis_questions
+- イベント説明
+- 対象年齢
+- 参加条件
+- 定員
+- 参加料金
+- 会員優待
+- キャンセル規定
+- 参加予約ボタン
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 質問ID |
-| version_id | uuid | 診断バージョン |
-| question_text | text | 質問内容 |
-| sort_order | integer | 表示順 |
+## 26.3 予約処理
 
-## 21.4 diagnosis_choices
+1. 参加条件を確認する。
+2. 空き状況を確認する。
+3. 予約内容を確認する。
+4. 必要な決済を行う。
+5. 決済結果を検証する。
+6. 予約を確定する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 選択肢ID |
-| question_id | uuid | 質問ID |
-| choice_text | text | 選択肢 |
-| score_data | jsonb | 評価値 |
-| sort_order | integer | 表示順 |
+定員超過と重複予約を防止する。
 
-## 21.5 diagnosis_results
+## 26.4 イベント状態
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 診断結果ID |
-| user_id | uuid | 会員ID |
-| version_id | uuid | 診断バージョン |
-| diagnosis_type_id | uuid | 判定タイプ |
-| score_data | jsonb | 集計結果 |
-| is_latest | boolean | 最新結果 |
-| completed_at | timestamptz | 診断日時 |
+- 公開前
+- 募集中
+- 満員
+- 募集終了
+- 開催済み
+- 開催中止
 
-## 21.6 diagnosis_answers
+## 26.5 イベントマッチング
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| result_id | uuid | 診断結果ID |
-| question_id | uuid | 質問ID |
-| choice_id | uuid | 選択肢ID |
+- 対象イベントの参加資格を確認する。
+- マッチング参加への同意を確認する。
+- 対象会員を表示する。
+- マッチング申請を送信する。
+- 相手が承認する。
+- マッチングを成立させる。
 
-診断回答は非公開とする。
+参加者情報を無条件に全会員へ公開しない。
 
-本人が公開を許可した場合のみ最新のタイプ名などをプロフィールへ表示する。
-
-20問・4択・8タイプは初期案とし、固定値にしない。
+マッチング申請可能期間は別途決定する。
 
 ---
 
-# 22. コンテンツ管理
+# 27. 婚活サポート
 
-## 22.1 articles
+## 27.1 サポート紹介画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 記事ID |
-| category_id | uuid | カテゴリーID |
-| title | text | タイトル |
-| body | text | 本文 |
-| image_path | text | 画像 |
-| status | text | 公開状態 |
-| published_at | timestamptz | 公開日時 |
+- サービス説明
+- 月額料金
+- サポート内容
+- 利用条件
+- 予約方法
+- 契約ボタン
 
-## 22.2 article_categories
+## 27.2 相談予約
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | カテゴリーID |
-| name | text | 名称 |
-| sort_order | integer | 表示順 |
-| is_active | boolean | 利用状態 |
+入力項目：
 
-## 22.3 message_templates
+- 希望日時
+- 相談方法
+- 相談カテゴリー
+- 相談内容
+- 備考
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 例文ID |
-| category | text | カテゴリー |
-| title | text | タイトル |
-| body | text | 例文 |
-| is_active | boolean | 公開状態 |
+相談方法：
 
-## 22.4 profile_templates
+- 対面
+- オンライン
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | テンプレートID |
-| category | text | カテゴリー |
-| template_text | text | テンプレート本文 |
-| variables | jsonb | 差し込み項目 |
-| is_active | boolean | 利用状態 |
+## 27.3 相談カテゴリー
 
-## 22.5 announcements
+- 恋愛相談
+- 婚活相談
+- 再婚活相談
+- プロフィール添削
+- 写真アドバイス
+- メッセージ添削
+- デート相談
+- 交際相談
+- 結婚相談
+- お相手紹介
+- 活動分析
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | お知らせID |
-| title | text | タイトル |
-| body | text | 本文 |
-| importance | text | 重要度 |
-| starts_at | timestamptz | 公開開始 |
-| ends_at | timestamptz | 公開終了 |
-| is_published | boolean | 公開状態 |
+## 27.4 予約状態
 
-## 22.6 campaigns
+- 申請中
+- 確定
+- 変更申請中
+- キャンセル
+- 相談完了
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | キャンペーンID |
-| title | text | 名称 |
-| description | text | 内容 |
-| reward_settings | jsonb | 特典設定 |
-| starts_at | timestamptz | 開始日時 |
-| ends_at | timestamptz | 終了日時 |
-| is_active | boolean | 有効状態 |
+## 27.5 お相手紹介
 
----
+1. 管理者が紹介候補を選択する。
+2. 双方へ紹介情報を提示する。
+3. 双方が承認または辞退する。
+4. 双方の承認を確認する。
+5. マッチングを成立させる。
 
-# 23. 通知
+紹介を希望しない会員への無断紹介は禁止する。
 
-## 23.1 notifications
+## 27.6 相談記録
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 通知ID |
-| user_id | uuid | 通知対象 |
-| notification_type | text | 通知種類 |
-| title | text | タイトル |
-| body | text | 内容 |
-| reference_id | uuid | 関連データID |
-| is_read | boolean | 既読状態 |
-| created_at | timestamptz | 作成日時 |
-| read_at | timestamptz | 既読日時 |
+管理者は相談日時、相談カテゴリー、対応内容、今後の対応方針を記録できる。
 
-基本通知種類：
+相談記録は一般会員へ公開しない。
 
-- like_received
-- message_like_received
-- match_created
-- message_received
-
-運営通知種類：
-
-- age_verification_result
-- identity_verification_result
-- payment_result
-- security_notice
-
-## 23.2 notification_settings
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| user_id | uuid | 会員ID・主キー |
-| like_enabled | boolean | いいね通知 |
-| match_enabled | boolean | マッチング通知 |
-| message_enabled | boolean | メッセージ通知 |
-| show_message_preview | boolean | 本文プレビュー |
-| updated_at | timestamptz | 更新日時 |
+相談時間と利用上限は未確定とする。
 
 ---
 
-# 24. 通報・安全対策
+# 28. 恋愛タイプ診断
 
-## 24.1 reports
+## 28.1 診断開始画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 通報ID |
-| reporter_id | uuid | 通報会員 |
-| reported_user_id | uuid | 対象会員 |
-| target_type | text | 通報対象種類 |
-| target_id | uuid | 対象データID |
-| reason | text | 通報理由 |
-| description | text | 詳細 |
-| status | text | 対応状態 |
-| assigned_admin_id | uuid | 担当管理者 |
-| created_at | timestamptz | 通報日時 |
-| resolved_at | timestamptz | 対応日時 |
+- 診断説明
+- 質問数
+- 診断開始ボタン
 
-## 24.2 report_evidence
+## 28.2 質問画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 証拠ID |
-| report_id | uuid | 通報ID |
-| evidence_type | text | 証拠種類 |
-| storage_path | text | 非公開保存先 |
-| created_at | timestamptz | 保存日時 |
-| expires_at | timestamptz | 保存期限 |
+- 現在の質問番号
+- 進捗表示
+- 質問文
+- 選択肢
+- 前へ
+- 次へ
 
-## 24.3 penalties
+## 28.3 診断処理
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 処分ID |
-| user_id | uuid | 対象会員 |
-| report_id | uuid | 関連通報 |
-| penalty_type | text | 処分種類 |
-| reason | text | 処分理由 |
-| admin_id | uuid | 担当管理者 |
-| starts_at | timestamptz | 開始日時 |
-| ends_at | timestamptz | 終了日時 |
-| revoked_at | timestamptz | 取消日時 |
+各回答に設定された評価値を集計する。
 
-処分種類：
+集計結果から恋愛タイプを判定する。
 
-- warning
-- feature_restriction
-- suspension
-- permanent_ban
+AI APIは使用しない。
 
-## 24.4 appeals
+## 28.4 結果画面
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 申立ID |
-| penalty_id | uuid | 対象処分 |
-| user_id | uuid | 申立会員 |
-| reason | text | 申立理由 |
-| status | text | 対応状態 |
-| resolution | text | 対応結果 |
-| created_at | timestamptz | 申立日時 |
-| resolved_at | timestamptz | 対応日時 |
+- 恋愛タイプ名
+- タイプイラスト
+- 性格傾向
+- 恋愛傾向
+- 長所
+- 注意点
+- 恋愛アドバイス
+- プロフィール公開設定
+- 再診断
 
-## 24.5 prohibited_words
+20問・4択・8タイプを初期案とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 禁止ワードID |
-| word | text | 対象文字列 |
-| category | text | カテゴリー |
-| severity | integer | 重要度 |
-| action_type | text | 検知時の処理 |
-| is_active | boolean | 有効状態 |
-
-## 24.6 moderation_flags
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 検知ID |
-| user_id | uuid | 対象会員 |
-| target_type | text | 対象種類 |
-| target_id | uuid | 対象ID |
-| rule_code | text | 検知ルール |
-| severity | integer | 重要度 |
-| status | text | 確認状態 |
-| created_at | timestamptz | 検知日時 |
-
-自動検知結果は管理者審査の参考情報として扱う。
+質問内容、評価値、診断タイプは別途仕様を作成する。
 
 ---
 
-# 25. お問い合わせ
+# 29. 恋愛支援コンテンツ
 
-## 25.1 inquiries
+以下を実装候補とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 問い合わせID |
-| user_id | uuid | 会員ID |
-| category | text | カテゴリー |
-| subject | text | 件名 |
-| status | text | 対応状態 |
-| assigned_admin_id | uuid | 担当管理者 |
-| created_at | timestamptz | 受付日時 |
-| closed_at | timestamptz | 完了日時 |
+## 29.1 自己紹介文作成支援
 
-## 25.2 inquiry_messages
+選択された趣味、性格、利用目的などをテンプレートに組み込み、自己紹介文候補を生成する。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 回答ID |
-| inquiry_id | uuid | 問い合わせID |
-| sender_type | text | user・admin |
-| sender_id | uuid | 送信者ID |
-| body | text | 内容 |
-| attachment_path | text | 添付ファイル |
-| created_at | timestamptz | 送信日時 |
+## 29.2 メッセージ例文
 
----
+カテゴリー案：
 
-# 26. 管理者システム
+- 初回メッセージ
+- 趣味について
+- 会話の広げ方
+- デートのお誘い
+- 日程調整
+- デート後のお礼
 
-## 26.1 admins
+例文をコピーして編集できる構造とする。
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 管理者ID |
-| auth_user_id | uuid | 認証ID |
-| display_name | text | 管理者名 |
-| role_id | uuid | 権限グループ |
-| is_active | boolean | 利用状態 |
-| last_login_at | timestamptz | 最終ログイン |
+自動送信は行わない。
 
-## 26.2 admin_roles
+## 29.3 プロフィール改善支援
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 権限グループID |
-| code | text | 権限コード |
-| name | text | 名称 |
+- 写真登録状況
+- 自己紹介文入力状況
+- 趣味登録状況
+- 基本情報入力状況
 
-権限グループ案：
+入力状況に応じた改善提案を表示する。
 
-- super_admin
-- member_manager
-- verification_manager
-- support_manager
-- event_manager
-- content_manager
-- accounting_manager
+## 29.4 恋愛コラム
 
-初期運営では少人数でも利用できる構造とする。
+- 記事一覧
+- 記事詳細
+- カテゴリー検索
 
-## 26.3 admin_permissions
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 権限ID |
-| code | text | 操作権限コード |
-| description | text | 権限説明 |
-
-## 26.4 admin_role_permissions
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| role_id | uuid | 権限グループ |
-| permission_id | uuid | 操作権限 |
-
-## 26.5 admin_audit_logs
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 操作履歴ID |
-| admin_id | uuid | 操作管理者 |
-| action | text | 操作内容 |
-| target_type | text | 対象種類 |
-| target_id | uuid | 対象ID |
-| reason | text | 操作理由 |
-| change_summary | jsonb | 変更概要 |
-| created_at | timestamptz | 操作日時 |
-
-以下の操作は必ず記録する。
-
-- 証明書閲覧
-- 認証承認
-- 認証否認
-- 会員停止
-- 強制退会
-- ポイント調整
-- 決済関連操作
-- 設定変更
-- 管理者権限変更
-
-秘密情報や証明書画像そのものを操作ログへ保存しない。
+記事は管理者が登録・編集する。
 
 ---
 
-# 27. システム設定
+# 30. マイページ
 
-## 27.1 system_settings
+## 30.1 基本構成
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| key | text | 設定キー・主キー |
-| value | jsonb | 設定値 |
-| description | text | 設定説明 |
-| updated_by | uuid | 更新管理者 |
-| updated_at | timestamptz | 更新日時 |
+- 自分のプロフィール
+- プロフィール編集
+- 会員プラン
+- 年齢確認
+- 本人確認
+- ポイント残高
+- ポイント購入
+- ポイント履歴
+- ログインスタンプカード
+- 足あと
+- お気に入り
+- 各種設定
+- ブロックリスト
+- お問い合わせ
+- 利用規約
+- プライバシーポリシー
+- ログアウト
+- 退会
 
-設定キー例：
-
-- daily_like_free_male
-- daily_like_premium
-- normal_like_cost
-- message_like_cost
-- message_like_max_length
-- message_max_length
-- message_unsend_hours
-- profile_photo_limit
-- free_footprint_limit
-- signup_bonus
-- profile_completion_bonus
-- age_verification_bonus
-- identity_verification_bonus
-- daily_login_bonus
-- consultation_monthly_limit
-- consultation_duration
-- introduction_monthly_limit
-- recommendation_weights
-- maintenance_mode
-
-## 27.2 feature_flags
-
-| カラム | 型 | 内容 |
-|---|---|---|
-| feature_code | text | 機能コード・主キー |
-| is_enabled | boolean | 有効状態 |
-| settings | jsonb | 補助設定 |
-| updated_at | timestamptz | 更新日時 |
-
-対象機能例：
-
-- payments
-- points
-- events
-- store_reservations
-- marriage_support
-- diagnosis
-- push_notifications
-- image_messages
-
-未完成機能は本番環境で無効にできるようにする。
+各機能の最終配置はUI_DESIGN.mdで定義する。
 
 ---
 
-# 28. 集計・退会・バックグラウンド処理
+# 31. ブロックシステム
 
-## 28.1 daily_statistics
+## 31.1 ブロック処理
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| target_date | date | 集計日 |
-| metric_code | text | 指標コード |
-| dimensions | jsonb | 集計区分 |
-| metric_value | numeric | 集計値 |
-| updated_at | timestamptz | 更新日時 |
+1. 対象会員のメニューを開く。
+2. ブロックを選択する。
+3. 確認画面を表示する。
+4. ブロック情報を登録する。
+5. 双方の交流を制限する。
 
-集計指標：
+## 31.2 ブロック後の制限
+
+- 検索結果から除外
+- おすすめから除外
+- プロフィール閲覧制限
+- いいね送信不可
+- マッチング不可
+- メッセージ送信不可
+- 足あと非表示
+- お気に入り非表示
+
+ブロックしたことを相手に通知しない。
+
+## 31.3 ブロック解除
+
+マイページのブロックリストから解除できる。
+
+解除によるマッチングの自動復元は行わない方式を初期案とする。
+
+---
+
+# 32. 通報システム
+
+## 32.1 通報対象
+
+- プロフィール
+- プロフィール写真
+- メッセージ
+- 会員の不適切な行為
+
+## 32.2 通報理由
+
+- なりすまし
+- 勧誘・営業
+- 投資詐欺
+- ロマンス詐欺
+- 不適切な画像
+- 不適切なメッセージ
+- 迷惑行為
+- 既婚者の疑い
+- 年齢詐称
+- その他
+
+## 32.3 通報処理
+
+1. 通報対象を選択する。
+2. 通報理由を選択する。
+3. 必要に応じて詳細を入力する。
+4. 通報を送信する。
+5. 管理者の対応一覧へ登録する。
+
+## 32.4 通報状態
+
+- 未対応
+- 確認中
+- 対応済み
+- 対応不要
+- 追加確認待ち
+
+通報者の情報は対象会員へ公開しない。
+
+---
+
+# 33. 不正利用防止
+
+## 33.1 検知対象
+
+- 短時間の大量操作
+- 大量の同一メッセージ
+- 禁止ワード
+- 不審な外部サービスへの誘導
+- 重複登録
+- 不正ログイン
+- 決済情報の不整合
+- ポイントの不正取得
+
+## 33.2 検知処理
+
+ルールベースの検知を使用する。
+
+検知結果を管理者へ提示し、必要に応じて機能制限または審査を行う。
+
+単一の検知結果のみで不正利用を確定しない。
+
+## 33.3 ペナルティ
+
+- 注意
+- 警告
+- 機能制限
+- 一時停止
+- 永久停止
+
+処分理由、期間、管理者情報を記録する。
+
+異議申し立ての受付に対応する。
+
+---
+
+# 34. お問い合わせ
+
+## 34.1 問い合わせカテゴリー
+
+- アカウント
+- 年齢確認
+- 本人確認
+- 決済
+- ポイント
+- マッチング
+- メッセージ
+- 店舗予約
+- イベント
+- 婚活サポート
+- 不正利用
+- その他
+
+## 34.2 入力項目
+
+- カテゴリー
+- 件名
+- 問い合わせ内容
+- 添付画像（必要に応じて）
+
+## 34.3 対応状態
+
+- 受付済み
+- 対応中
+- 回答済み
+- 完了
+
+---
+
+# 35. 退会システム
+
+## 35.1 退会画面
+
+表示内容：
+
+- 退会に関する説明
+- プロフィール削除について
+- ポイントの取り扱い
+- マッチング・メッセージの取り扱い
+- 有料契約の解約案内
+- 最終確認
+
+## 35.2 退会処理
+
+1. 本人の認証状態を確認する。
+2. 有効な有料契約を確認する。
+3. 必要な解約手続きを案内する。
+4. 退会意思を確認する。
+5. プロフィールを非公開にする。
+6. アカウントを無効化する。
+7. セッションを終了する。
+8. 個人情報削除処理を実行する。
+
+法令上必要な保存情報や不正利用防止に必要な情報は、適切な根拠と保存期間に基づいて管理する。
+
+---
+
+# 36. 決済システム
+
+## 36.1 対応方式
+
+- Web決済
+- iOSアプリ内決済
+- Androidアプリ内決済
+
+## 36.2 決済対象
+
+- プレミアム会員
+- 婚活サポート会員
+- ポイント購入
+- イベント参加費
+
+## 36.3 決済処理
+
+1. 商品を選択する。
+2. 料金を表示する。
+3. 決済を開始する。
+4. 決済事業者の結果を取得する。
+5. サーバー側で正当性を検証する。
+6. 契約またはポイントを反映する。
+7. 決済履歴を保存する。
+
+## 36.4 決済失敗
+
+- 決済失敗表示
+- 再試行
+- 二重決済防止
+- 未確認決済の照合
+- 不正な購入情報の拒否
+
+## 36.5 購入復元
+
+復元可能な購入について、購入情報を再確認し、利用権限を復元する。
+
+## 36.6 注意事項
+
+決済の詳細はPAYMENT.mdで定義する。
+
+実店舗サービスとデジタルサービスの決済区分は各ストアの規約に従う。
+
+---
+
+# 37. 管理者システム
+
+## 37.1 ダッシュボード
 
 - 総会員数
-- 新規登録数
+- 新規会員数
 - アクティブ会員数
 - 男女比
-- 年齢層
-- 地域別会員数
-- マッチング成立数
 - 有料会員数
 - 売上
-- 退会数
+- マッチング成立数
+- 未対応通報数
+- 未審査認証件数
+- 未対応予約件数
 
-少人数の集計から個人を特定できないように配慮する。
+## 37.2 会員管理
 
-## 28.2 deletion_requests
+- 会員検索
+- 会員詳細
+- 認証状態
+- 契約状態
+- 利用状態
+- 通報履歴
+- ペナルティ履歴
+- 利用停止
+- 利用停止解除
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 削除申請ID |
-| user_id | uuid | 対象会員 |
-| status | text | 処理状態 |
-| requested_at | timestamptz | 申請日時 |
-| completed_at | timestamptz | 完了日時 |
+## 37.3 認証審査
 
-## 28.3 background_jobs
+- 年齢確認申請一覧
+- 本人確認申請一覧
+- 承認
+- 否認
+- 再提出依頼
+- 審査履歴
 
-| カラム | 型 | 内容 |
-|---|---|---|
-| id | uuid | 処理ID |
-| job_type | text | 処理種類 |
-| reference_id | uuid | 関連データID |
-| status | text | 処理状態 |
-| attempts | integer | 試行回数 |
-| scheduled_at | timestamptz | 実行予定日時 |
-| completed_at | timestamptz | 完了日時 |
+## 37.4 売上管理
 
-対象処理：
+- 月額課金
+- ポイント販売
+- イベント売上
+- 決済履歴
+- 返金履歴
+- 解約状況
 
-- 通知送信
-- 期限切れ権限処理
-- 証明書削除
-- 退会データ削除
-- 集計処理
-- 決済照合
+## 37.5 コンテンツ管理
 
----
+- お知らせ
+- 恋愛コラム
+- イベント
+- 店舗情報
+- デートプラン
+- 恋愛タイプ診断
+- メッセージ例文
+- キャンペーン
 
-# 29. Supabase Storage設計
+## 37.6 予約管理
 
-## 29.1 バケット一覧
+- 店舗予約
+- イベント予約
+- 婚活相談予約
+- 予約変更
+- キャンセル
+- 対応履歴
 
-| バケット名 | 公開設定 | 用途 |
-|---|---|---|
-| profile-photos | 非公開 | プロフィール写真 |
-| verification-documents | 非公開 | 年齢・本人確認書類 |
-| message-images | 非公開 | メッセージ画像 |
-| report-evidence | 非公開 | 通報証拠 |
-| inquiry-attachments | 非公開 | 問い合わせ添付 |
-| store-images | 公開可 | 店舗写真 |
-| event-images | 公開可 | イベント画像 |
-| article-images | 公開可 | コラム画像 |
-| diagnosis-images | 公開可 | 診断イラスト |
-| stickers | 公開可 | スタンプ |
+## 37.7 システム設定
 
-## 29.2 保存パス例
+- 会員料金
+- いいね回復数
+- いいね消費数
+- ポイント付与数
+- ポイント消費数
+- ポイント商品
+- ログインボーナス
+- 機能利用権限
+- おすすめ評価値
+- 禁止ワード
+- 機能有効・無効
+- メンテナンス設定
 
-profile-photos/{user_id}/{photo_id}
+管理者による設定変更は操作履歴へ記録する。
 
-verification-documents/{user_id}/{request_id}/{document_id}
+## 37.8 管理者権限
 
-message-images/{conversation_id}/{message_id}
+- 管理者専用認証
+- 多要素認証
+- 操作権限管理
+- 個人情報アクセス制限
+- 操作履歴保存
 
-report-evidence/{report_id}/{evidence_id}
-
-## 29.3 アクセス制御
-
-- プロフィール写真は閲覧権限を確認して配信する。
-- 証明書は権限を持つ管理者のみ閲覧可能とする。
-- メッセージ画像は対象会話の閲覧権限を持つ会員のみ閲覧可能とする。
-- 通報証拠は権限を持つ管理者のみ閲覧可能とする。
-- 必要に応じて短時間有効な署名付きURLを使用する。
-- ブロック後も既発行URLが有効な時間を最小限にする。
-- ファイル形式と容量を検証する。
-- 不要な画像メタデータを削除する。
-
----
-
-# 30. RLSアクセス制御
-
-一般会員がアクセス可能なすべてのテーブルに適切なRLSを設定する。
-
-RLSだけでカラム単位の公開制限を実現しようとせず、非公開テーブル、限定ビュー、RPCを併用する。
-
-## 30.1 アクセス権限表
-
-| データ | 本人 | 他会員 | 管理者 |
-|---|---|---|---|
-| アカウント | 制限付き閲覧 | 不可 | 権限による |
-| 非公開情報 | 制限付き閲覧 | 不可 | 権限による |
-| プロフィール | 閲覧・編集 | 公開項目のみ | 権限による |
-| 認証書類 | 申請操作 | 不可 | 審査権限のみ |
-| いいね | 関連分のみ | 関連分のみ | 必要時のみ |
-| マッチング | 関連分のみ | 関連分のみ | 必要時のみ |
-| メッセージ | 関連会話のみ | 関連会話のみ | 通報対応等に限定 |
-| お気に入り | 本人のみ | 不可 | 原則不可 |
-| 足あと | 権限範囲内 | 不可 | 必要時のみ |
-| ブロック | 自分の登録分 | 不可 | 必要時のみ |
-| ポイント | 自分の残高・履歴 | 不可 | 権限による |
-| 決済 | 自分の履歴 | 不可 | 会計権限のみ |
-| 診断回答 | 本人のみ | 不可 | 原則不可 |
-| 診断結果 | 本人のみ | 公開許可分 | 必要時のみ |
-| 相談記録 | 原則非公開 | 不可 | 担当権限のみ |
-| 通報 | 自分の受付情報 | 不可 | 対応権限のみ |
-| 管理者操作履歴 | 不可 | 不可 | 監査権限のみ |
-
-管理者であっても無条件に全データへアクセスできる設計にはしない。
+詳細はADMIN.mdで定義する。
 
 ---
 
-# 31. サーバー側処理
+# 38. 共通エラー表示
 
-以下の処理はRPCまたはEdge Functionsを使用して実装する。
+以下の状態に対応する。
 
-## 31.1 会員関連
+- 通信できない
+- ログイン期限切れ
+- 権限がない
+- 年齢確認が必要
+- いいね残数不足
+- ポイント残高不足
+- 会員が存在しない
+- 利用停止中
+- 予約できない
+- 定員に達している
+- 決済に失敗した
+- メンテナンス中
+- データ取得失敗
 
-- complete_registration
-- update_profile
-- get_public_profile
-- search_members
-- get_recommended_members
-- submit_verification
-- review_verification
-- withdraw_account
+利用者には理解しやすい日本語で表示する。
 
-## 31.2 マッチング関連
-
-- get_daily_like_balance
-- send_like
-- send_message_like
-- accept_like
-- create_match
-- unmatch
-- record_footprint
-- get_footprints
-- add_favorite
-- remove_favorite
-- block_user
-- unblock_user
-
-## 31.3 メッセージ関連
-
-- send_message
-- unsend_message
-- add_message_reaction
-- mark_message_read
-- get_read_receipt
-- create_date_invitation
-- respond_date_invitation
-- request_date_change
-- respond_date_change
-
-## 31.4 ポイント関連
-
-- grant_points
-- spend_points
-- purchase_extra_likes
-- unlock_feature
-- claim_login_bonus
-- adjust_points
-
-## 31.5 決済関連
-
-- create_checkout
-- verify_purchase
-- process_payment_webhook
-- update_subscription
-- restore_purchase
-- process_refund
-
-## 31.6 予約関連
-
-- create_store_reservation
-- confirm_store_reservation
-- reserve_event
-- confirm_event_payment
-- cancel_event_reservation
-- create_consultation
-- create_introduction
-- respond_introduction
-- create_event_match_request
-- respond_event_match_request
-
-## 31.7 診断関連
-
-- submit_diagnosis
-- calculate_diagnosis_result
-- update_diagnosis_visibility
-
-## 31.8 安全対策関連
-
-- submit_report
-- apply_penalty
-- revoke_penalty
-- submit_appeal
-- process_account_deletion
-
-各処理は認証、権限、入力値、利用状態をサーバー側で検証する。
-
-会員IDはクライアントから渡された値を無条件に信用せず、認証済みユーザーIDを使用する。
+内部エラー、秘密情報、データベース構造などは公開しない。
 
 ---
 
-# 32. トランザクション管理
+# 39. データ整合性
 
-以下の処理は原則として同一データベーストランザクション内で実行する。
+以下の処理はサーバー側で実行する。
 
-## 32.1 いいね送信
-
-- 残数確認
-- 重複確認
-- いいね登録
-- 残数消費
-- 通知データ登録
-
-## 32.2 マッチング成立
-
-- 承認条件確認
-- いいね状態更新
-- マッチング登録
-- 会話ルーム作成
-- 通知データ登録
-
-## 32.3 ポイント消費
-
-- 残高確認
-- ポイント減算
-- 取引履歴登録
-- 対象機能の解放
-
-## 32.4 ログインボーナス
-
-- 当日獲得確認
-- スタンプ登録
+- いいね消費
+- マッチング成立
 - ポイント付与
-- 達成報酬判定
-- 報酬履歴登録
+- ポイント消費
+- ログインボーナス
+- 会員権限変更
+- 決済検証
+- イベント定員管理
+- 年齢確認状態変更
+- アカウント停止
 
-## 32.5 イベント予約
-
-- 定員確認
-- 予約枠確保
-- 予約状態更新
-
-外部決済は単一のデータベーストランザクションに含められないため、仮予約、決済確認、再試行、返金処理を組み合わせて整合性を確保する。
-
----
-
-# 33. インデックス・一意制約
-
-## 33.1 インデックス対象
-
-- profiles.prefecture
-- profiles.city
-- profiles.gender
-- profiles.relationship_purpose
-- profiles.marital_history
-- accounts.last_active_at
-- likes.receiver_id
-- likes.sender_id
-- matches.user_a_id
-- matches.user_b_id
-- messages.conversation_id
-- messages.created_at
-- footprints.target_user_id
-- notifications.user_id
-- subscriptions.user_id
-- point_transactions.user_id
-- events.starts_at
-- event_reservations.event_id
-- reports.status
-- consultations.user_id
-
-複合インデックスは実際の検索条件と実行計画を確認して追加する。
-
-## 33.2 一意制約
-
-- 同一趣味の重複登録
-- 同一お気に入りの重複登録
-- 同一ブロックの重複登録
-- 同一方向のいいね重複
-- 同一ペアの有効マッチング重複
-- 同一日のログインボーナス重複
-- 同一月の達成報酬重複
-- 同一決済イベント重複
-- 同一ポイント取引重複
-- 同一イベントの有効予約重複
-
-## 33.3 CHECK制約
-
-- ポイント残高が0以上
-- いいね使用数が0以上
-- いいね使用数が付与数以下
-- 金額が0以上
-- 予約人数が1以上
-- 最低年齢が最高年齢以下
-- 自分自身へのいいね禁止
-- 自分自身へのブロック禁止
+同時操作や通信再試行が発生しても、重複登録や二重消費が発生しない設計とする。
 
 ---
 
-# 34. データ削除方針
+# 40. 共通テスト項目
 
-退会時は以下の順序で処理する。
+各機能について以下を確認する。
 
-1. アカウントを利用不可にする。
-2. プロフィールを非公開にする。
-3. 新規交流を停止する。
-4. セッションを無効化する。
-5. 有料契約の状態を確認する。
-6. 削除対象データを特定する。
-7. 写真・証明書などを削除する。
-8. 個人情報を削除または適切に匿名化する。
-9. 法令上必要な情報を分離して保存する。
-10. 削除処理の完了を記録する。
-
-外部キーの削除ルールはテーブルごとに設定する。
-
-決済記録や安全対策上必要な記録まで無条件に連鎖削除しない。
-
-保存期間は法令とプライバシーポリシーに基づいて確定する。
-
----
-
-# 35. バックアップ・復旧
-
-- データベースの定期バックアップ
-- ストレージのバックアップ方針
-- マイグレーション履歴管理
-- 復旧手順の文書化
-- 誤削除対策
-- 本番環境と開発環境の分離
-- 定期的な復旧テスト
-
-利用可能なバックアップ機能はSupabaseの契約プランに応じて確認する。
+- 正常操作
+- 入力エラー
+- 通信エラー
+- 権限不足
+- 年齢確認前の操作
+- ブロック状態での操作
+- 利用停止状態での操作
+- 二重タップ
+- 同時操作
+- セッション切れ
+- データ未登録
+- スマートフォン表示
+- PCブラウザ表示
+- 不正なAPIリクエスト
+- 他会員データへの不正アクセス
 
 ---
 
-# 36. Supabaseプロジェクト構成
+# 41. 未確定事項
 
-推奨ディレクトリ構成：
-
-    sereness-match/
-    ├── src/
-    ├── public/
-    ├── supabase/
-    │   ├── config.toml
-    │   ├── migrations/
-    │   ├── functions/
-    │   ├── tests/
-    │   └── seed.sql
-    ├── .env.example
-    ├── .gitignore
-    ├── SPEC.md
-    ├── FEATURES.md
-    ├── DATABASE.md
-    ├── UI_DESIGN.md
-    ├── ADMIN.md
-    ├── SECURITY.md
-    ├── PAYMENT.md
-    ├── DEVELOPMENT.md
-    └── AGENTS.md
-
-既存プロジェクトの構造を確認してから導入する。
-
----
-
-# 37. マイグレーション作成順序
-
-1. アカウント基本テーブル
-2. 管理者権限テーブル
-3. システム設定
-4. プロフィール
-5. 認証審査
-6. 会員プラン
-7. いいね
-8. マッチング
-9. ブロック
-10. お気に入り・足あと
-11. メッセージ
-12. デート支援
-13. 決済管理
-14. ポイント
-15. ログインボーナス
-16. 店舗
-17. イベント
-18. 婚活サポート
-19. 恋愛タイプ診断
-20. コンテンツ
-21. 通知
-22. 通報・安全対策
-23. お問い合わせ
-24. 集計・削除処理
-25. RLS・Storageポリシー
-26. RPC・Edge Functions
-27. テストデータ
-28. 統合テスト
-
-RLSは各テーブルの作成段階から有効化し、最後まで無防備な状態で放置しない。
-
----
-
-# 38. 環境変数
-
-フロントエンド用：
-
-    VITE_SUPABASE_URL=
-    VITE_SUPABASE_PUBLISHABLE_KEY=
-
-サーバー専用：
-
-    SUPABASE_SERVICE_ROLE_KEY=
-    STRIPE_SECRET_KEY=
-    STRIPE_WEBHOOK_SECRET=
-
-その他の決済・通知関連キーは採用サービス確定後に追加する。
-
-秘密鍵を以下へ保存してはならない。
-
-- フロントエンドコード
-- 公開GitHubリポジトリ
-- GitHub Pagesの公開ファイル
-- アプリ配布ファイル
-- ログ
-- 仕様書
-
-.env.exampleには実際の秘密鍵を記載しない。
-
----
-
-# 39. データベーステスト
-
-## 39.1 アクセス制御テスト
-
-- 他会員の非公開情報を取得できない。
-- 他会員の証明書を取得できない。
-- 他会員のポイントを変更できない。
-- 他会員の決済情報を変更できない。
-- 無関係な会話を閲覧できない。
-- 管理者権限を自己付与できない。
-- 年齢確認状態を自己変更できない。
-- 非公開プロフィールを検索できない。
-
-## 39.2 マッチングテスト
-
-- 年齢確認前にいいねできない。
-- ブロック相手にいいねできない。
-- 残数不足時に送信できない。
-- 同じいいねを二重消費しない。
-- 同じマッチングが重複成立しない。
-- マッチング前にメッセージできない。
-
-## 39.3 ポイントテスト
-
-- 残高不足時に消費できない。
-- 同時消費で残高が負数にならない。
-- ログインボーナスを二重取得できない。
-- 決済通知の再送で二重付与されない。
-- ポイント消費と機能解放が一致する。
-
-## 39.4 予約テスト
-
-- イベント定員を超過しない。
-- 同じイベントへ重複予約できない。
-- 決済失敗時に確定扱いにならない。
-- 仮予約期限切れで予約枠が解放される。
-- 相談枠が重複予約されない。
-
-## 39.5 退会テスト
-
-- 退会会員が検索結果に表示されない。
-- 退会会員がメッセージを送信できない。
-- セッションが無効化される。
-- 削除対象の画像が削除される。
-- 保存対象の法定記録が誤削除されない。
-
----
-
-# 40. 未確定事項
-
-以下は正式決定まで変更可能な設計とする。
+以下は開発者判断のみで確定しない。
 
 - プロフィール選択肢
-- 非公開モードの詳細
-- 追加いいねの有効期限
-- ポイント有効期限
-- ポイント消費優先順位
+- 文字数制限
+- 写真容量・形式・枚数
+- スキップ後の再表示条件
+- マッチング解除後の再マッチング条件
 - メッセージ保存期間
-- 認証書類保存期間
-- 退会後のデータ保存期間
+- スタンプの種類
+- リアクションの種類
+- ポイント価格
+- ポイント有効期限
+- 追加いいねの有効期間
+- ログインボーナス報酬
+- おすすめ計算式
+- 店舗予約の自動確定条件
 - イベント割引率
 - イベントキャンセル規定
 - 婚活相談時間
-- 月間相談回数
+- 婚活相談利用回数
 - お相手紹介人数
-- 恋愛診断の判定方法
-- おすすめ会員の計算式
-- 決済事業者の正式選定
+- 恋愛診断質問内容
+- 恋愛診断タイプ
+- 認証方法
+- 証明書保存期間
+- ペナルティ基準
+- データ削除期間
+- 決済サービスの正式選定
 - 通知サービスの正式選定
-- 管理者権限の最終構成
-
-未確定事項を勝手に正式仕様へ変更してはならない。
+- 非公開モードの詳細
 
 ---
 
-# 41. Codexへの開発指示
+# 42. Codexへの実装指示
 
-1. SPEC.md、FEATURES.md、DATABASE.mdを読み込むこと。
-2. 既存コードとデータ構造を分析すること。
-3. 既存データベースの有無を確認すること。
-4. 実装済みテーブルと未実装テーブルを整理すること。
-5. テーブル間の外部キー関係を定義すること。
-6. マイグレーションSQLを段階的に作成すること。
-7. RLSを各テーブルに適切に設定すること。
-8. 非公開情報を公開APIから分離すること。
-9. サーバー側の権限検証を実装すること。
-10. トランザクション処理を実装すること。
-11. 重複処理防止を実装すること。
-12. テストデータと本番データを分離すること。
-13. 実在する利用者の個人情報をテストに使用しないこと。
-14. 秘密鍵をGitHubへ登録しないこと。
-15. 本番データベースへの破壊的変更を無断で実行しないこと。
-16. ローカルまたは開発環境でテストすること。
-17. テーブル定義、RLS、RPCのテスト結果を報告すること。
-18. 仕様書間の矛盾や不足を発見した場合は報告すること。
-19. 未確定事項は設定値または未実装として管理すること。
-20. 許可なく本番環境へデプロイしないこと。
+1. SPEC.mdとFEATURES.mdを読み込むこと。
+2. 既存プログラムの構成を確認すること。
+3. 実装済み機能と未実装機能を整理すること。
+4. 各機能の依存関係を整理すること。
+5. 画面とサーバー処理を分離すること。
+6. 会員権限をサーバー側で検証すること。
+7. データベースへのアクセス権限を適切に制御すること。
+8. デモデータと正式データを分離すること。
+9. 未確定事項を勝手に正式仕様としないこと。
+10. 各機能のテストを作成すること。
+11. 実装内容と変更履歴を記録すること。
+12. 許可なく本番環境へ公開しないこと。
+13. 全機能を一括実装せず、開発工程に従って段階的に実装すること。
+14. 不明点や仕様の矛盾を発見した場合は報告すること。
 
-本仕様書は論理設計および物理設計の初期案である。
-
-実際のSQL作成時には外部キー、NOT NULL、DEFAULT、UNIQUE、CHECK、削除ルール、RLSポリシーを明確に定義すること。
-
-全テーブルを一括で本番環境へ作成するのではなく、依存関係を整理して段階的に構築すること。
+本仕様書を保存した時点では、全機能の一括実装を開始しないこと。
 
 以上。
