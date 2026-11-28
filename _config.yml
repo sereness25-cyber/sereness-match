@@ -3,6 +3,7 @@ exclude:
   - dist-admin
   - node_modules
   - tests
+  - supabase
   - capacitor.config.ts
   - vite.admin.config.ts
   - app
