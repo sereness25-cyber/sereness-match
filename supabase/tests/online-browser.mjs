@@ -28,7 +28,15 @@ try {
     await page.goto(url)
     await page.getByRole('button',{name:'新規登録へ'}).click()
     await page.getByLabel('テスト用メールアドレス').fill(email(name))
-    await page.getByLabel('パスワード').fill(password)
+    await page.getByLabel('パスワード',{exact:true}).fill(password)
+    if(name==='非公開会員') {
+      await page.getByLabel('パスワード（確認）',{exact:true}).fill(password+'-wrong')
+      await page.getByRole('button',{name:'登録する'}).click()
+      await page.getByText('確認用のパスワードが一致しません。').waitFor()
+      await page.getByLabel('テスト用メールアドレス').fill(email(name))
+      await page.getByLabel('パスワード',{exact:true}).fill(password)
+    }
+    await page.getByLabel('パスワード（確認）',{exact:true}).fill(password)
     await page.getByRole('button',{name:'登録する'}).click()
     await page.getByRole('heading',{name:'会員一覧'}).waitFor()
     await page.getByRole('button',{name:'自分のプロフィールを編集'}).click()
@@ -62,10 +70,26 @@ try {
   })
   await viewer.reload()
   await viewer.getByRole('heading',{name:'会員一覧'}).waitFor()
+  const refreshToken=await viewer.evaluate(()=>{
+    const key=Object.keys(sessionStorage).find(name=>name.startsWith('sereness-local-session:'))
+    return JSON.parse(sessionStorage.getItem(key)).refresh_token
+  })
   await viewer.getByRole('button',{name:'ログアウト'}).click()
   await viewer.getByRole('heading',{name:'テストアカウントでログイン'}).waitFor()
+  const refresh=await fetch(new URL('/auth/v1/token?grant_type=refresh_token',process.env.VITE_SUPABASE_URL),{
+    method:'POST',
+    headers:{ apikey:process.env.VITE_SUPABASE_PUBLIC_KEY,'Content-Type':'application/json' },
+    body:JSON.stringify({refresh_token:refreshToken}),
+  })
+  assert.equal(refresh.status,400)
+  await viewer.reload()
+  await viewer.getByRole('heading',{name:'テストアカウントでログイン'}).waitFor()
   await viewer.getByLabel('テスト用メールアドレス').fill(email('閲覧会員'))
-  await viewer.getByLabel('パスワード').fill(password)
+  await viewer.getByLabel('パスワード',{exact:true}).fill(password+'-wrong')
+  await viewer.getByRole('button',{name:'ログイン',exact:true}).click()
+  await viewer.getByText('ログインできませんでした。テストアカウントと接続設定を確認してください。').waitFor()
+  await viewer.getByLabel('テスト用メールアドレス').fill(email('閲覧会員'))
+  await viewer.getByLabel('パスワード',{exact:true}).fill(password)
   await viewer.getByRole('button',{name:'ログイン',exact:true}).click()
   await viewer.getByRole('heading',{name:'会員一覧'}).waitFor()
   assert.deepEqual(compileErrors,[])

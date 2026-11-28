@@ -141,6 +141,10 @@ export function startOnline(rawUrl: string | undefined, key: string | undefined)
     const {node,send}=form(registering?'登録する':'ログイン',values=>perform(async()=>{
       const email=String(values.get('email')??'').trim()
       const password=String(values.get('password')??'')
+      if(registering&&password!==values.get('password_confirmation')) {
+        notice='確認用のパスワードが一致しません。'
+        return
+      }
       if(!/^[^@\s]+@example\.com$/i.test(email)) {
         notice='example.com の架空メールアドレスを使ってください。'
         return
@@ -153,7 +157,19 @@ export function startOnline(rawUrl: string | undefined, key: string | undefined)
         notice='登録を受け付けました。確認が必要な場合はローカルの確認メールを開いてからログインしてください。'
       }
     },registering?'登録できませんでした。ローカルSupabaseの設定と入力内容を確認してください。':'ログインできませんでした。テストアカウントと接続設定を確認してください。'))
-    node.append(field('email','テスト用メールアドレス','email'),field('password','パスワード','password'),send)
+    const email=field('email','テスト用メールアドレス','email')
+    email.querySelector('input')!.autocomplete='email'
+    const password=field('password','パスワード','password')
+    const passwordInput=password.querySelector('input')!
+    passwordInput.autocomplete=registering?'new-password':'current-password'
+    node.append(email,password)
+    if(registering) {
+      passwordInput.minLength=8
+      const confirmation=field('password_confirmation','パスワード（確認）','password')
+      confirmation.querySelector('input')!.autocomplete='new-password'
+      node.append(confirmation)
+    }
+    node.append(send)
     panel.append(element('h1',title),element('p','Supabaseへの接続を確認する画面です。架空のアカウントを使ってください。'),node,
       button(registering?'ログイン画面へ':'新規登録へ',()=>navigate(registering?'login':'register'),true))
   }
