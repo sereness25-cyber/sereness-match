@@ -44,3 +44,7 @@
 PR #6に統合基本仕様の整理版と [Phase 2最初の検証計画](PHASE2_PLAN.md) を追加。旧SPECの詳細は同一blobでFEATURESへ配置した。DATABASEは元の設計書を保持。mainは承認まで現状維持。本番接続、DB適用、確認メールの再送は今回実施していない。
 
 次回はPR #6の最終CIと最新mainとの差分を確認し、統合承認に従う。Phase 2を実行する場合は、計画のP2-A・P2-Bから始め、使い捨てのローカルまたは開発用Supabaseに限定する。
+
+## PR #7最終確認とPhase 2-C準備
+
+最新mainからAUTH.mdを履歴を保ったまま取り込み、関連仕様を整理した。Supabaseのローカル開発資材はPagesの配信対象から除外。Phase 2-Cには着手していない。PR #7の最終CIと運営者の統合承認を確認してから、[Phase 2-C計画](PHASE2_C_PLAN.md)に従う。Phase 3ではAUTH.mdと確認済みメールの追加要件を照合する。
