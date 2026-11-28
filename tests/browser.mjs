@@ -1,5 +1,5 @@
 import { chromium } from 'playwright-core'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import assert from 'node:assert/strict'
@@ -163,9 +163,13 @@ try {
   await page.goto(base+'/online-preview/')
   await page.getByText('オンライン環境の準備中です。接続はPhase 2で行います。').waitFor()
   assert.equal(await page.getByRole('link',{name:'新規会員登録'}).count(),0)
+  const onlineAssets=new URL('../dist-online/assets/',import.meta.url)
+  for(const asset of await readdir(onlineAssets)) {
+    if(asset.endsWith('.js')) assert.doesNotMatch(await readFile(new URL(asset,onlineAssets),'utf8'),/sereness-v04|あかり/)
+  }
   assert.deepEqual(onlineRequests,[])
   assert.deepEqual(errors,[])
-  console.log('Browser smoke checks passed: register/login, 6 menus, search/save/clear, favorite, match, chat/read/report/block, reservations, profile, and 14 admin views.')
+  console.log('Browser smoke checks passed: 6 demo menus, profiles, authentication, matching, chat, admin, Pages offline, and the isolated online build.')
 } finally {
   await ctx?.close()
   server.close()

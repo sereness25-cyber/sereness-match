@@ -10,10 +10,18 @@ export default defineConfig(({ mode }) => {
   }
   const demoBuild = mode === 'pages'
   const onlinePreview = mode === 'online-preview'
+  const online = !demoBuild && (onlinePreview || env.VITE_APP_MODE === 'online')
   return {
     root: 'app',
     base: './',
     resolve: { preserveSymlinks: true },
+    plugins: online ? [{
+      name: 'sereness-online-entry',
+      transformIndexHtml: {
+        order: 'pre',
+        handler: html => html.replace('src="/entry.ts"', 'src="/online-entry.ts"'),
+      },
+    }] : [],
     define: demoBuild || onlinePreview ? {
       'import.meta.env.VITE_APP_MODE': JSON.stringify(demoBuild ? 'demo' : 'online'),
       'import.meta.env.VITE_SUPABASE_URL': 'undefined',

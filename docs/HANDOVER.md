@@ -2,7 +2,7 @@
 
 ## Phase 1の引き継ぎ
 
-レビュー用ブランチは `codex/phase-1-foundation`、基点は `913ae312cf350770831cc13e2310e561cf8e8b60`。Node 22系とnpm、Vite、TypeScript、ESLint、GitHub Actionsを整備し、デモとオンライン準備を分離した。mainおよび公開環境への反映は運営者の承認待ち。Windows作業用チェックアウトは過去の未追跡状態を持つコピーとは別に用意した。
+レビュー用ブランチは `codex/phase-1-foundation`、基点は `913ae312cf350770831cc13e2310e561cf8e8b60`。[PR #6](https://github.com/sereness25-cyber/sereness-match/pull/6)でレビューする。Node 22系とnpm、Vite、TypeScript、ESLint、GitHub Actionsを整備し、デモとオンライン準備を分離した。mainおよび公開環境への反映は運営者の承認待ち。Windows作業用チェックアウトは過去の未追跡状態を持つコピーとは別に用意した。
 
 次のチャットでは、最新のGit履歴とPhase 1 PRを確認し、[README.md](../README.md) のコマンドを使う。Phase 2の指示を受けたら開発用Supabaseを選び、架空データ、公開可能な接続値、本番からの分離を確認する。#2と#4の試験結果を参照しつつ、現行仕様の年齢確認、RLS、Storage、証拠保持を設計する。本番メールは送達未確認のままなので、再送前にAuth Logsと受信状態を照合する。
 
