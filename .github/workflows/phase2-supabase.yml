@@ -1,0 +1,53 @@
+name: Phase 2 local Supabase
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 3.4.0
+      - run: npm ci
+      - name: Start isolated local Supabase and apply migrations
+        run: |
+          supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          supabase migration list --local
+      - name: Provision fictional accounts and verify SQL and API policies
+        run: |
+          set -euo pipefail
+          status="$(supabase status -o json)"
+          export LOCAL_DB_URL="$(jq -er '.DB_URL' <<< "$status")"
+          export LOCAL_API_URL="$(jq -er '.API_URL' <<< "$status")"
+          export LOCAL_PUBLISHABLE_KEY="$(jq -er '.PUBLISHABLE_KEY' <<< "$status")"
+          export LOCAL_SERVICE_KEY="$(jq -er '.SERVICE_ROLE_KEY // .SECRET_KEY' <<< "$status")"
+          node supabase/tests/integration.mjs
+      - name: Verify connected browser and public-only bundle
+        run: |
+          set -euo pipefail
+          status="$(supabase status -o json)"
+          export VITE_APP_MODE=online
+          export VITE_SUPABASE_URL="$(jq -er '.API_URL' <<< "$status")"
+          export VITE_SUPABASE_PUBLISHABLE_KEY="$(jq -er '.PUBLISHABLE_KEY' <<< "$status")"
+          npm exec -- vite build --outDir ../dist-local-supabase --emptyOutDir
+          export LOCAL_SERVICE_KEY="$(jq -er '.SERVICE_ROLE_KEY // .SECRET_KEY' <<< "$status")"
+          export LOCAL_NEW_SECRET_KEY="$(jq -r '.SECRET_KEY // empty' <<< "$status")"
+          node supabase/tests/browser-connection.mjs
+          if VITE_SUPABASE_PUBLISHABLE_KEY=sb_secret_invalid_fixture npm run build:online-preview >/tmp/sereness-key-guard.log 2>&1; then
+            echo 'The browser build accepted a secret key'
+            exit 1
+          fi
+          grep -q '公開用のVite環境変数だけを指定してください' /tmp/sereness-key-guard.log
+      - name: Stop disposable project
+        if: always()
+        run: |
+          if command -v supabase >/dev/null; then supabase stop --no-backup; fi

@@ -161,7 +161,7 @@ try {
     if(new URL(request.url()).origin!==base) onlineRequests.push(request.url())
   })
   await page.goto(base+'/online-preview/')
-  await page.getByText('オンライン環境の準備中です。接続はPhase 2で行います。').waitFor()
+  await page.getByText('ローカルSupabaseの接続設定がありません。').waitFor()
   assert.equal(await page.getByRole('link',{name:'新規会員登録'}).count(),0)
   const onlineAssets=new URL('../dist-online/assets/',import.meta.url)
   for(const asset of await readdir(onlineAssets)) {

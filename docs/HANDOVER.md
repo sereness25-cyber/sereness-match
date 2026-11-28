@@ -1,5 +1,11 @@
 # 引き継ぎ · Sereness Match
 
+## Phase 2-A・2-Bの引き継ぎ
+
+ブランチ `codex/phase-2-supabase` は承認済みコミット `a425549b02ddcbca1e05c75816643af42ad64b3a` から作成。Windows環境ではDockerが利用できず、GitHub Actionsの隔離されたローカルSupabaseを実行環境とした。最新のコードとCIを照合してから再開する。
+
+次回のPhase 2-Cは、アカウントと年齢確認を前提に、いいね、ありがとう、マッチング、会話参加者、ブロックを段階ごとに追加する。日次残高・重複防止、双方の年齢確認、停止・ブロック判定、通報証拠保持を先に受入条件へ入れ、旧PR #2のSQLを直接適用しない。マージ・本番適用は別承認。
+
 ## Phase 1の引き継ぎ
 
 レビュー用ブランチは `codex/phase-1-foundation`、基点は `913ae312cf350770831cc13e2310e561cf8e8b60`。[PR #6](https://github.com/sereness25-cyber/sereness-match/pull/6)でレビューする。Node 22系とnpm、Vite、TypeScript、ESLint、GitHub Actionsを整備し、デモとオンライン準備を分離した。mainおよび公開環境への反映は運営者の承認待ち。Windows作業用チェックアウトは過去の未追跡状態を持つコピーとは別に用意した。

@@ -1,5 +1,11 @@
 # Sereness Match 開発状況
 
+## Phase 2-A・2-B
+
+Phase 1の統合基点は `a425549b02ddcbca1e05c75816643af42ad64b3a`。レビュー対象は `codex/phase-2-supabase`。DBの状態、RLS、カラム権限で本人編集、非公開情報、会員停止、年齢確認、自己昇格を制御する。管理者には本人の管理者割り当てだけが見え、審査操作や他会員の非公開情報を見る権限は後工程で実装する。
+
+会員の権限は `entitlements`、管理者権限は4つの管理テーブルで表す。年齢・本人確認は `accounts` の時刻と種類別の `verification_requests` に記録する。運営者による更新、監査、証明書Storage、項目別の公開設定、正式な会員登録は後工程。 [テスト結果](TEST_REPORT.md)
+
 ## Phase 1の実装ブランチ
 
 `codex/phase-1-foundation` は最新仕様のmainを基点とするレビュー用ブランチ。main側の画面・運用状態は下のPhase 0記録のとおり。Phase 1では旧PR #1の基盤と#3のプロフィール導線を採用し、Phase 0資料は#5から取り込んだ。#2のSQLと#4のSupabase接続実装はPhase 2の参照候補として追跡する。

@@ -10,11 +10,13 @@ test('環境を明示的に分け、誤設定をデモへ戻さない', () => {
   assert.deepEqual(readConfig({ VITE_APP_MODE: 'online' }), { mode: 'online' })
   assert.deepEqual(readConfig({ VITE_APP_MODE: 'production' }), { mode: 'invalid' })
   assert.deepEqual(readConfig({ VITE_APP_MODE: 'online', VITE_SUPABASE_URL: 'http://example.com',
-    VITE_SUPABASE_PUBLIC_KEY: 'sb_publishable_fixture' }), { mode: 'invalid' })
+    VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture' }), { mode: 'invalid' })
   assert.deepEqual(readConfig({ VITE_APP_MODE: 'online', VITE_SUPABASE_URL: 'https://example.com',
-    VITE_SUPABASE_PUBLIC_KEY: 'sb_secret_fixture' }), { mode: 'invalid' })
+    VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_fixture' }), { mode: 'invalid' })
   assert.equal(readConfig({ VITE_APP_MODE: 'online', VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
-    VITE_SUPABASE_PUBLIC_KEY: 'sb_publishable_fixture' }).mode, 'online')
+    VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture' }).mode, 'online')
+  assert.deepEqual(readConfig({ VITE_APP_MODE: 'online', VITE_SUPABASE_URL: 'https://example.supabase.co',
+    VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fixture' }), { mode: 'invalid' })
 })
 
 test('APIは許可した接続先だけを使用し、失敗内容に秘密を含めない', async () => {

@@ -1,5 +1,14 @@
 # Phase 0 テスト報告
 
+## Phase 2-A・2-Bの検証
+
+対象は使い捨てのローカルSupabase。最新の実行結果は [Phase 2統合検証](https://github.com/sereness25-cyber/sereness-match/actions/workflows/phase2-supabase.yml) と [Phase 1回帰検証](https://github.com/sereness25-cyber/sereness-match/actions/workflows/check.yml) で確認する。
+
+- 空DBでマイグレーション履歴と9テーブルのRLSを照合。Supabase Authで架空の5会員を作成し、SQLロールとSDKによるAPIの両方で検証する。
+- 本人更新が成功し、他会員更新は0行か権限拒否になる。匿名、他会員、停止会員の非公開・保護対象アクセス、自己の年齢審査変更、管理者自己付与を拒否することを確認する。
+- Chromeはオンライン起動時の匿名拒否を確認する。成果物をスキャンし、実際にCIで使ったサーバーキーを含まないことと、誤設定した秘密キーでビルドが拒否されることを確認する。
+- 回帰はnpm、lint、型チェック、単体テスト、4種類のWebビルド、旧デモ操作、Pagesサブパスでのオフライン再読込。
+
 ## Phase 1の検証
 
 対象は最新仕様を保持した `codex/phase-1-foundation`。アプリの通信先はテストダブルを使う。GitHub ActionsはPRで読み取り権限の検証のみを実行する。
