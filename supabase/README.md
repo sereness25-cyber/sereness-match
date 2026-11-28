@@ -13,7 +13,7 @@ Supabaseのローカル開発DBでマイグレーションを適用してから�
 
 ## アプリの接続テスト
 
-`supabase init` と `supabase start` で使い捨てのローカル環境を起動し、`supabase status` で接続値を確認します。`.env.local` に次の値を設定して `npm run dev -- --port 5174` を実行します。
+`supabase init` と `supabase start` で使い捨てのローカル環境を起動し、`supabase status` で接続値を確認します。`app/.env.local` に次の値を設定し、リポジトリルートで `npm run dev -- --port 5174` を実行します。
 
 ```dotenv
 VITE_SUPABASE_URL=http://127.0.0.1:54321

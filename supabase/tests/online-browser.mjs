@@ -41,13 +41,25 @@ try {
     return page
   }
   await register('非公開会員',false)
-  await register('公開会員',true)
+  const publisher=await register('公開会員',true)
   const viewer=await register('閲覧会員',false)
   await viewer.getByRole('button',{name:'公開会員のプロフィールを見る',exact:true}).click()
   await viewer.getByRole('heading',{name:'公開会員',exact:true}).waitFor()
   await viewer.getByText('架空の自己紹介 · 公開会員',{exact:true}).waitFor()
   await viewer.getByRole('button',{name:'会員一覧へ'}).click()
   assert.equal(await viewer.getByRole('button',{name:'非公開会員のプロフィールを見る',exact:true}).count(),0)
+  await publisher.getByRole('button',{name:'自分のプロフィールを編集'}).click()
+  await publisher.getByLabel('検索結果に表示する').uncheck()
+  await publisher.getByRole('button',{name:'プロフィールを保存'}).click()
+  await publisher.getByText('プロフィールを保存しました。').waitFor()
+  await viewer.getByRole('button',{name:'一覧を更新'}).click()
+  await viewer.getByText('表示できる会員はいません。').waitFor()
+  await viewer.evaluate(()=>{
+    const key=Object.keys(sessionStorage).find(name=>name.startsWith('sereness-local-session:'))
+    const session=JSON.parse(sessionStorage.getItem(key))
+    session.expires_at=0
+    sessionStorage.setItem(key,JSON.stringify(session))
+  })
   await viewer.reload()
   await viewer.getByRole('heading',{name:'会員一覧'}).waitFor()
   await viewer.getByRole('button',{name:'ログアウト'}).click()

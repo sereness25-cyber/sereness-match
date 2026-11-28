@@ -42,7 +42,7 @@ export function startOnline(rawUrl: string | undefined, key: string | undefined)
   let selected: Profile | undefined
   let notice = ''
   let busy = false
-  try { session = JSON.parse(sessionStorage.getItem(storageKey) ?? 'null') }
+  try { save(JSON.parse(sessionStorage.getItem(storageKey) ?? 'null')) }
   catch { /* session storage is optional */ }
 
   async function request<T>(path: string, method='GET', body?: unknown, token?: string): Promise<T> {
