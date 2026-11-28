@@ -42,3 +42,7 @@
 ## Phase 2準備に伴うPhase 1の再確認
 
 仕様整理前のPhase 1の先端 `d1f08cf4514a0e8ae8fc9b9e12a3dcb95ec8566d` の既往CIは成功。仕様整理コミットは文書のみを変更し、同じlint・型チェック・ビルド・ブラウザ回帰を [PR #6のChecks](https://github.com/sereness25-cyber/sereness-match/pull/6/checks) で再実行する。旧SPECと新FEATURESのblob同一性、DATABASEのblob維持、公開ルートの差分なしを確認項目とする。Supabaseの接続・マイグレーション・RLSは実行計画を作成した段階。
+
+## PR #7最終確認
+
+AUTH.mdの原本は最新mainと同じblob。最終コミットのSQL・API・Chrome統合テストと旧デモ回帰は [PR #7のChecks](https://github.com/sereness25-cyber/sereness-match/pull/7/checks) に記録する。公開HTMLは現行と一致。`supabase/` をJekyllの配信対象から除外した。本番認証サービスやPhase 2-Cの実装は検証範囲に含めない。
