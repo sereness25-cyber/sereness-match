@@ -29,3 +29,7 @@
 | 本番権限・実機 | Supabase本番、iOS・Android実機 | 未実行。試験用RLSの結果は本番設定や最新仕様の検証を代替しない |
 
 次の試験は (1) Phase 1の依存導入・lint・型チェック・自動テスト・Webビルド、(2) デモの主要画面とスマートフォン幅、(3) デモと本番の設定分離、(4) Phase 2で匿名・会員A/B・管理者・停止会員のRLSとStorage、(5) メール送達・期限切れ・正しいリダイレクト、(6) バックアップ復元と回帰。実データの投入はテストに使用しない。
+
+## Phase 2準備に伴うPhase 1の再確認
+
+仕様整理前のPhase 1の先端 `d1f08cf4514a0e8ae8fc9b9e12a3dcb95ec8566d` の既往CIは成功。仕様整理コミットは文書のみを変更し、同じlint・型チェック・ビルド・ブラウザ回帰を [PR #6のChecks](https://github.com/sereness25-cyber/sereness-match/pull/6/checks) で再実行する。旧SPECと新FEATURESのblob同一性、DATABASEのblob維持、公開ルートの差分なしを確認項目とする。Supabaseの接続・マイグレーション・RLSは実行計画を作成した段階。
