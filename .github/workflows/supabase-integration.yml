@@ -17,9 +17,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: 3.4.0
       - name: Install app and browser test dependencies
         run: |
           npm ci
