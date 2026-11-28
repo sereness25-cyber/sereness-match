@@ -1,5 +1,9 @@
 # 引き継ぎ · Sereness Match
 
+## Phase 2-C 引き継ぎ
+
+基点はPR #7の統合コミット f38294f9fb2bb209144fc82ade2f745a2f26bc36。開発ブランチは codex/phase-2-c-matching。AUTH.mdと本番設定は対象外。20回枠はサーバー管理の daily_likes_20 権限を参照する。正式付与の運用、証拠保存期間、ブロック解除後の履歴表示、追加いいねの消費順・期限は未確定。Phase 2-Dは承認後に非公開Storageの設計と権限検証から着手する。
+
 ## Phase 2-A・2-Bの引き継ぎ
 
 ブランチ `codex/phase-2-supabase` は承認済みコミット `a425549b02ddcbca1e05c75816643af42ad64b3a` から作成。Windows環境ではDockerが利用できず、GitHub Actionsの隔離されたローカルSupabaseを実行環境とした。最新のコードとCIを照合してから再開する。

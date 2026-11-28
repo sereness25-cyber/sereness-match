@@ -1,5 +1,9 @@
 # Phase 0 テスト報告
 
+## Phase 2-C
+
+ローカルのPostgreSQL互換エンジンでマイグレーションとSQLアサーションを確認。実際のSupabase Auth・PostgREST・並行操作の結果はGitHub Actionsの「Phase 2 local Supabase」の clean / forward を参照。Web・管理者・Pagesビルド、デモ操作・オフライン再読み込みは回帰ワークフローを参照。
+
 ## Phase 2-A・2-Bの検証
 
 対象は使い捨てのローカルSupabase。最新の実行結果は [Phase 2統合検証](https://github.com/sereness25-cyber/sereness-match/actions/workflows/phase2-supabase.yml) と [Phase 1回帰検証](https://github.com/sereness25-cyber/sereness-match/actions/workflows/check.yml) で確認する。

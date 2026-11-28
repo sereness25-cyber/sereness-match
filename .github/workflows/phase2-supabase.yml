@@ -8,6 +8,10 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        migration-path: [clean, forward]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -19,10 +23,18 @@ jobs:
           version: 3.4.0
       - run: npm ci
       - name: Start isolated local Supabase and apply migrations
+        env:
+          MIGRATION_PATH: ${{ matrix.migration-path }}
         run: |
+          set -euo pipefail
+          if [ "$MIGRATION_PATH" = forward ]; then
+            mkdir "$RUNNER_TEMP/sereness-phase2c"
+            mv supabase/migrations/20261128020*.sql "$RUNNER_TEMP/sereness-phase2c/"
+          fi
           supabase start -x realtime,storage-api,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
-          supabase migration list --local
       - name: Provision fictional accounts and verify SQL and API policies
+        env:
+          MIGRATION_PATH: ${{ matrix.migration-path }}
         run: |
           set -euo pipefail
           status="$(supabase status -o json)"
@@ -31,7 +43,14 @@ jobs:
           export LOCAL_PUBLISHABLE_KEY="$(jq -er '.PUBLISHABLE_KEY' <<< "$status")"
           export LOCAL_SERVICE_KEY="$(jq -er '.SERVICE_ROLE_KEY // .SECRET_KEY' <<< "$status")"
           node supabase/tests/integration.mjs
+          if [ "$MIGRATION_PATH" = forward ]; then
+            mv "$RUNNER_TEMP/sereness-phase2c/"*.sql supabase/migrations/
+            supabase migration up --local
+          fi
+          supabase migration list --local
+          node supabase/tests/matching-integration.mjs
       - name: Verify connected browser and public-only bundle
+        if: matrix.migration-path == 'clean'
         run: |
           set -euo pipefail
           status="$(supabase status -o json)"
