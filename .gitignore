@@ -7,4 +7,7 @@ dist-online/
 !.env.example
 android/
 ios/
+supabase/.temp/
+supabase/.branches/
+dist-local-supabase/
 

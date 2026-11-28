@@ -1,5 +1,11 @@
 # 引き継ぎ · Sereness Match
 
+## Phase 2-A・2-Bの引き継ぎ
+
+ブランチ `codex/phase-2-supabase` は承認済みコミット `a425549b02ddcbca1e05c75816643af42ad64b3a` から作成。Windows環境ではDockerが利用できず、GitHub Actionsの隔離されたローカルSupabaseを実行環境とした。最新のコードとCIを照合してから再開する。
+
+次回のPhase 2-Cは、アカウントと年齢確認を前提に、いいね、ありがとう、マッチング、会話参加者、ブロックを段階ごとに追加する。日次残高・重複防止、双方の年齢確認、停止・ブロック判定、通報証拠保持を先に受入条件へ入れ、旧PR #2のSQLを直接適用しない。マージ・本番適用は別承認。
+
 ## Phase 1の引き継ぎ
 
 レビュー用ブランチは `codex/phase-1-foundation`、基点は `913ae312cf350770831cc13e2310e561cf8e8b60`。[PR #6](https://github.com/sereness25-cyber/sereness-match/pull/6)でレビューする。Node 22系とnpm、Vite、TypeScript、ESLint、GitHub Actionsを整備し、デモとオンライン準備を分離した。mainおよび公開環境への反映は運営者の承認待ち。Windows作業用チェックアウトは過去の未追跡状態を持つコピーとは別に用意した。
@@ -38,3 +44,7 @@
 PR #6に統合基本仕様の整理版と [Phase 2最初の検証計画](PHASE2_PLAN.md) を追加。旧SPECの詳細は同一blobでFEATURESへ配置した。DATABASEは元の設計書を保持。mainは承認まで現状維持。本番接続、DB適用、確認メールの再送は今回実施していない。
 
 次回はPR #6の最終CIと最新mainとの差分を確認し、統合承認に従う。Phase 2を実行する場合は、計画のP2-A・P2-Bから始め、使い捨てのローカルまたは開発用Supabaseに限定する。
+
+## PR #7最終確認とPhase 2-C準備
+
+最新mainからAUTH.mdを履歴を保ったまま取り込み、関連仕様を整理した。Supabaseのローカル開発資材はPagesの配信対象から除外。Phase 2-Cには着手していない。PR #7の最終CIと運営者の統合承認を確認してから、[Phase 2-C計画](PHASE2_C_PLAN.md)に従う。Phase 3ではAUTH.mdと確認済みメールの追加要件を照合する。

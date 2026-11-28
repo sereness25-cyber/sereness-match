@@ -8,5 +8,5 @@ export default [
   ...tseslint.configs.recommended,
   { files: ['app/**/*.ts', 'admin/**/*.ts'], languageOptions: { globals: globals.browser } },
   { files: ['app/public/sw.js'], languageOptions: { globals: globals.serviceworker } },
-  { files: ['tests/**/*.{ts,mjs}', '*.config.{ts,mjs}'], languageOptions: { globals: globals.node } },
+  { files: ['tests/**/*.{ts,mjs}', 'supabase/tests/*.mjs', '*.config.{ts,mjs}'], languageOptions: { globals: globals.node } },
 ]

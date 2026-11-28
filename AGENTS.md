@@ -72,6 +72,7 @@ Codexは未承認の事業方針を独断で決定しない。
 |---|---|
 | AGENTS.md | 開発ルール |
 | SPEC.md | 統合基本仕様書 |
+| AUTH.md | 会員認証方式・共通会員ID・認証連携 |
 | FEATURES.md | 全機能詳細仕様書 |
 | DATABASE.md | データベース設計書 |
 | UI_DESIGN.md | 画面・デザイン仕様書 |
@@ -503,7 +504,7 @@ supabase/migrations/
 
 ## 15.1 認証
 
-Supabase Authを使用する。
+Supabase Authを使用する。正式採用のログイン方法と実装順はAUTH.mdを参照する。環境ごとに検証し、本番の有効化は正式公開の承認に従う。
 
 独自の安全性が確認されていないパスワード管理を実装しない。
 

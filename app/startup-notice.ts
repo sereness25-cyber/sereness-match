@@ -8,7 +8,7 @@ export function showStartupNotice(online = false) {
   status.className = 'notice'
   status.setAttribute('role', 'status')
   status.textContent = online
-    ? 'オンライン環境の準備中です。接続はPhase 2で行います。'
+    ? 'ローカルSupabaseの接続設定がありません。'
     : '起動設定を確認してください。'
   main.append(heading, status)
   document.querySelector('#app')?.replaceChildren(main)
