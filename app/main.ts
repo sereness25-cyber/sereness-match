@@ -46,10 +46,13 @@ function go(path:string, replace=false) {
 function portrait(p: Profile, large=false) {
   return '<div class="portrait' + (large ? ' large' : '') + '" aria-label="架空プロフィールのイラスト">' + p.portrait + '</div>'
 }
-function cards(people:Profile[], scrolling=false) {
+type ProfileOrigin = 'home' | 'search' | 'likes' | 'messages' | 'chat' | 'match'
+const profileRoute = (p:Profile, origin:ProfileOrigin) => 'member/'+p.id+'/'+origin
+function cards(people:Profile[], scrolling=false, origin:ProfileOrigin='home') {
   if (!people.length) return empty('表示できる会員はいません。')
   return '<div class="' + (scrolling ? 'rail' : 'grid') + '">' + people.map(p =>
-    '<article class="card"><a href="#member/' + p.id + '">' + portrait(p) + '<h3>' + p.name + ' <small>' + p.age + '歳</small></h3></a>' +
+    '<article class="card"><a class="member-link" href="#' + profileRoute(p,origin) + '">' + portrait(p) +
+    '<h3>' + p.name + ' <small>' + p.age + '歳</small></h3><span>プロフィールを見る ›</span></a>' +
     '<small>' + p.region + (p.verified ? ' ・ 確認済（架空）' : '') + '</small><p>' + p.hobbies + '</p>' +
     button(likesTo().includes(p.id) ? '♥ いいね済み' : '♡ いいね','like',p.id,'secondary') + '</article>',
   ).join('') + '</div>'
@@ -80,10 +83,12 @@ function search() {
       '<option value="'+key+'"'+((filters.sort??'')===key?' selected':'')+'>'+label+'</option>',
     ).join('') + '</select></label><div class="actions"><button>検索する</button><button name="save" value="yes" class="secondary">条件を保存</button>' +
     button('条件を解除','filters-clear','','secondary') + '</div></form>' +
-    section('検索結果',cards(searchMembers(visible(),filters)))
+    section('検索結果',cards(searchMembers(visible(),filters),false,'search'))
 }
-function details(p:Profile) {
-  return link('‹ 戻る','search') + portrait(p,true) +
+function details(p:Profile, origin:string) {
+  const back = ['home','search','likes','messages'].includes(origin) ? origin :
+    (origin==='chat'||origin==='match') && hasMatch(p.id) ? origin+'/'+p.id : 'search'
+  return link('‹ 戻る',back) + portrait(p,true) +
     '<div class="pair photo-strip"><div class="portrait">☕</div><div class="portrait">🌿</div></div><h1>' + p.name + ' ' + p.age + '歳</h1>' +
     '<p>' + p.region + ' ・ ' + p.login + (p.verified ? ' ・ ✓ 本人確認済（架空）' : ' ・ 本人確認未完了') + '</p>' +
     '<div class="actions">' + (likesTo().includes(p.id) ? button('いいねを取り消す','unlike',p.id) : button('♡ いいね','like',p.id)) +
@@ -98,7 +103,7 @@ function connectionList() {
   const ids = [likesFrom(),likesTo(),state.matches.map(m=>m.memberId),state.favorites,state.footprints,state.history][likesTab]
   return '<h1>いいね</h1><div class="segments" aria-label="いいねの分類">' +
     likeTabs.map((tab,i)=>button(tab,'likes-tab',String(i),i===likesTab?'':'secondary')).join('') +
-    '</div>' + cards(ids.map(member).filter((p):p is Profile=>Boolean(p)))
+    '</div>' + cards(ids.map(member).filter((p):p is Profile=>Boolean(p)),false,'likes')
 }
 function messages() {
   return '<h1>メッセージ</h1>' + (state.matches.length ? state.matches.map(m => {
@@ -112,7 +117,8 @@ function messages() {
   }).join('') : empty('マッチングするとメッセージを送れます。'))
 }
 function chat(p:Profile) {
-  return link('‹ メッセージ一覧','messages') + '<h1>'+p.portrait+' '+p.name+'</h1><p class="muted">ローカルメッセージの試用中</p>' +
+  return '<div class="actions">'+link('‹ メッセージ一覧','messages')+
+    link('相手のプロフィールを見る',profileRoute(p,'chat'))+'</div><h1>'+p.portrait+' '+p.name+'</h1><p class="muted">ローカルメッセージの試用中</p>' +
     '<div class="conversation">' + state.messages.filter(m=>m.memberId===p.id).map(m=>
       '<article class="bubble '+m.from+'"><p>'+escape(m.text)+'</p><small>'+date(m.at)+(m.from==='self'?(m.read?' ・ 既読':' ・ 未読'):'')+'</small></article>',
     ).join('') + '</div><form class="box" data-form="chat" data-id="'+p.id+'"><label>メッセージ<textarea id="message" name="message" required maxlength="1000"></textarea></label>' +
@@ -182,7 +188,7 @@ const legal = {
   contact:['お問い合わせ','お問い合わせの受付は正式運用時に開始します。'],
 }
 function render() {
-  let [page,id]=location.hash.slice(1).split('/')
+  let [page,id,origin]=location.hash.slice(1).split('/')
   const publicPages=['welcome','login','register','terms','privacy']
   if (!page || (!state.signedIn&&!publicPages.includes(page)) || (state.signedIn&&['welcome','login','register'].includes(page))) {
     page=state.signedIn?'home':'welcome'
@@ -205,13 +211,14 @@ function render() {
     case 'member': {
       const p=member(id)
       if(p && state.history[0]!==id) { state.history=[id,...state.history.filter(x=>x!==id)]; persist(status) }
-      content=p?details(p):empty('会員を表示できません。')
+      content=p?details(p,origin):empty('会員を表示できません。')+link('さがす','search')
       break
     }
     case 'match': {
       const p=member(id)
       content=p&&hasMatch(id)?'<div class="hero"><h1>マッチング成立</h1><p>'+p.name+'さんとマッチングしました。</p>'+
-        link('メッセージを送る','chat/'+id)+'</div>':empty('マッチングが見つかりません。')
+        '<div class="actions">'+link('メッセージを送る','chat/'+id)+
+        link('相手のプロフィールを見る',profileRoute(p,'match'))+'</div></div>':empty('マッチングが見つかりません。')
       break
     }
     case 'chat': {
