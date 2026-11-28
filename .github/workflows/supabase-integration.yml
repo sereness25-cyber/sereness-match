@@ -2,6 +2,7 @@ name: Supabase integration
 on:
   pull_request:
     paths:
+      - 'app/**'
       - 'supabase/**'
       - '.github/workflows/supabase-integration.yml'
   workflow_dispatch:
@@ -19,6 +20,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Install app and browser test dependencies
+        run: |
+          npm ci
+          npm install --prefix "$RUNNER_TEMP/sereness-browser" playwright-core
       - name: Start local Supabase
         run: |
           supabase init
@@ -33,6 +38,14 @@ jobs:
           export LOCAL_SERVICE_KEY="$(jq -er '.SERVICE_ROLE_KEY // .SECRET_KEY' <<< "$status")"
           psql "$LOCAL_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/match_core.sql
           node supabase/tests/api-integration.mjs
+      - name: Run browser integration against Supabase
+        run: |
+          set -euo pipefail
+          status="$(supabase status -o json)"
+          export VITE_SUPABASE_URL="$(jq -er '.API_URL' <<< "$status")"
+          export VITE_SUPABASE_PUBLIC_KEY="$(jq -er '.ANON_KEY // .PUBLISHABLE_KEY' <<< "$status")"
+          npm run build
+          PLAYWRIGHT_MODULE="$RUNNER_TEMP/sereness-browser/node_modules/playwright-core/index.mjs" node supabase/tests/online-browser.mjs
       - name: Stop test containers
         if: always()
         run: supabase stop --no-backup
